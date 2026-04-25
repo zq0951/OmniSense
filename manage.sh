@@ -46,39 +46,31 @@ function show_usage() {
     echo "用法: ./manage.sh [command] [options]"
     echo ""
     echo "命令:"
-    echo "  start       启动 OmniSense 服务"
+    echo "  start       启动 OmniSense 所有服务"
     echo "  stop        停止 OmniSense 服务"
     echo "  restart     重启 OmniSense 服务"
     echo "  logs        查看实时日志"
     echo "  clean       彻底清理容器、镜像和卷"
     echo "  help        显示帮助信息"
     echo ""
-    echo "启动选项 (仅对 'start' 有效):"
-    echo "  --voice-only  仅启动核心语音服务 (默认)"
-    echo "  --full        启动所有服务 (包含雷达感知)"
-    echo "  --build       启动前强制重新构建镜像"
+    echo "选项:"
+    echo "  --build     启动前强制重新构建镜像"
 }
 
 case "$1" in
     start)
-        MODE="语音核心 (Voice Only)"
         DOCKER_CMD="docker compose"
-        ARGS=""
+        BUILD_FLAG=""
         
-        # 解析参数
-        [[ "$*" == *"--full"* ]] && MODE="全功能 (Full with Radar)" && ARGS="--profile radar"
         [[ "$*" == *"--build"* ]] && BUILD_FLAG="--build"
 
-        log "正在启动模式: ${GREEN}${MODE}${NC}..."
+        log "正在启动 OmniSense 服务..."
         
-        $DOCKER_CMD $ARGS up -d $BUILD_FLAG
+        $DOCKER_CMD up -d $BUILD_FLAG
         
         if [ $? -eq 0 ]; then
             log "✅ ${GREEN}OmniSense 启动成功！${NC}"
             log "您可以运行 ${BLUE}./manage.sh logs${NC} 查看系统运行状态。"
-            if [[ "$MODE" == *"Voice Only"* ]]; then
-                log "提示: 如果您有雷达硬件，可以使用 ${YELLOW}./manage.sh start --full${NC} 开启空间感知。"
-            fi
         else
             error "❌ 启动失败，请检查 Docker 日志或配置文件。"
         fi
@@ -86,27 +78,26 @@ case "$1" in
 
     stop)
         log "正在停止所有服务..."
-        docker compose --profile radar stop
+        docker compose stop
         log "服务已停止。"
         ;;
 
     restart)
         log "正在重启..."
         $0 stop
-        # 继承原始启动参数（排除 restart 单词）
         $0 start "${@:2}"
         ;;
 
     logs)
         log "正在查看日志 (Ctrl+C 退出)..."
-        docker compose --profile radar logs -f
+        docker compose logs -f
         ;;
 
     clean)
         warn "⚠️ 警告：这将删除所有 OmniSense 容器、本地构建的镜像和持久化卷。"
         read -p "确定要继续吗？(y/N) " confirm
         if [[ "$confirm" == [yY] || "$confirm" == [yY][eE][sS] ]]; then
-            docker compose --profile radar down --rmi local --volumes --remove-orphans
+            docker compose down --rmi local --volumes --remove-orphans
             log "清理完成。"
         else
             log "已取消清理。"

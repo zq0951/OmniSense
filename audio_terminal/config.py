@@ -55,4 +55,6 @@ SILENCE_PADDING_DURATION = 0.15 # 150ms 静默注入
 # MOSS-TTS-Nano 离线补丁配置
 MOSS_PATH = os.path.join(PROJECT_ROOT, "MOSS-TTS-Nano")
 # 具体的 .model 文件路径，用于触发 main.py 中的猴子补丁
-MOSS_CHECKPOINT_PATH = "/app/MOSS-TTS-Nano/hf_cache/hub/models--OpenMOSS-Team--MOSS-TTS-Nano/snapshots/44502f80dbf9743528fa921cc544d662c685ebec/tokenizer.model"
+# 默认指向 Docker 容器内的路径，可通过 .env 覆盖
+DEFAULT_MOSS_MODEL = "/app/MOSS-TTS-Nano/hf_cache/hub/models--OpenMOSS-Team--MOSS-TTS-Nano/snapshots/44502f80dbf9743528fa921cc544d662c685ebec/tokenizer.model"
+MOSS_CHECKPOINT_PATH = os.getenv("MOSS_CHECKPOINT_PATH", DEFAULT_MOSS_MODEL)

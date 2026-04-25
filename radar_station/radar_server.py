@@ -73,19 +73,26 @@ def save_data(data):
             os.unlink(tmp_path)
 
 # --- Constants and Configuration ---
-HA_URL = os.getenv("HA_URL", "http://192.168.2.200:8123")
+HA_URL = os.getenv("HA_URL", "http://localhost:8123")
 HA_TOKEN = os.getenv("HA_TOKEN")
-TEMP_ENTITY_ID = os.getenv("TEMP_ENTITY_ID", "sensor.miaomiaoce_t2_aabf_temperature")
+TEMP_ENTITY_ID = os.getenv("TEMP_ENTITY_ID", "sensor.living_room_temperature")
 
-COUNT_ENTITY = "sensor.fang_jian_duo_mu_biao_lei_da_dang_qian_ren_shu"
+# 雷达实体配置
+COUNT_ENTITY = os.getenv("RADAR_COUNT_ENTITY", "sensor.radar_presence_count")
 TARGETS = [1, 2, 3]
-ENTITIES = {
-    t: {
-        "x": f"sensor.fang_jian_duo_mu_biao_lei_da_mu_biao_{t}_xzhou",
-        "y": f"sensor.fang_jian_duo_mu_biao_lei_da_mu_biao_{t}_yzhou",
-        "v": f"sensor.fang_jian_duo_mu_biao_lei_da_mu_biao_{t}_su_du"
-    } for t in TARGETS
-}
+
+# 动态生成实体映射
+def get_radar_entities(target_id):
+    x_pattern = os.getenv("RADAR_X_PATTERN", "sensor.radar_target_{id}_x")
+    y_pattern = os.getenv("RADAR_Y_PATTERN", "sensor.radar_target_{id}_y")
+    v_pattern = os.getenv("RADAR_V_PATTERN", "sensor.radar_target_{id}_speed")
+    return {
+        "x": x_pattern.format(id=target_id),
+        "y": y_pattern.format(id=target_id),
+        "v": v_pattern.format(id=target_id)
+    }
+
+ENTITIES = {t: get_radar_entities(t) for t in TARGETS}
 
 # Calibration Parameters (可通过 .env 覆盖)
 RADAR_X = float(os.getenv("RADAR_X", "0.0"))
@@ -97,7 +104,8 @@ RADAR_MIRROR_X = os.getenv("RADAR_MIRROR_X", "true").lower() in ("true", "1", "y
 RADAR_MIRROR_Y = os.getenv("RADAR_MIRROR_Y", "false").lower() in ("true", "1", "yes")
 
 # [PROACTIVE CONFIG]
-AGENT_API_URL = "http://localhost:8642/v1/chat/completions"
+AUDIO_TERMINAL_URL = os.getenv("AUDIO_TERMINAL_URL", "http://localhost:8000")
+AGENT_API_URL = os.getenv("AGENT_API_URL", "http://localhost:8642")
 AGENT_TOKEN = os.getenv("API_SERVER_KEY", "your_token_here")
 
 
@@ -157,7 +165,8 @@ def trigger_agent_proactive(zone_id, duration_sec):
     
     try:
         # 委托给语音终端处理
-        resp = requests.post("http://localhost:8000/v1/audio/proactive", json={"input": ctx_prompt}, timeout=5)
+        proactive_url = f"{AUDIO_TERMINAL_URL}/v1/audio/proactive"
+        resp = requests.post(proactive_url, json={"input": ctx_prompt}, timeout=5)
         if resp.status_code == 200:
             print(f"🚀 [主动感知] 已通知语音终端处理区域事件: {zone_id}")
             last_trigger_time[zone_id] = now

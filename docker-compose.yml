@@ -55,7 +55,6 @@ services:
 
 
   radar_station:
-    profiles: ["radar"]
     build: .
     container_name: jarvis_radar_station
     restart: unless-stopped

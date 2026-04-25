@@ -156,23 +156,37 @@ def playback_worker(audio_queue):
                 break
             
             if aplay_proc is None:
-                aplay_proc = subprocess.Popen(
-                    ["aplay", "-D", "default", "-f", "S16_LE", "-r", str(HW_SAMPLE_RATE), "-c", "2", "-t", "raw"],
-                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                TASK_CTRL.set_aplay(aplay_proc)
-                
-                silence_padding = b'\x00' * int(HW_SAMPLE_RATE * 2 * 2 * SILENCE_PADDING_DURATION)
                 try:
+                    aplay_proc = subprocess.Popen(
+                        ["aplay", "-D", "default", "-f", "S16_LE", "-r", str(HW_SAMPLE_RATE), "-c", "2", "-t", "raw"],
+                        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                    TASK_CTRL.set_aplay(aplay_proc)
+                    
+                    silence_padding = b'\x00' * int(HW_SAMPLE_RATE * 2 * 2 * SILENCE_PADDING_DURATION)
                     aplay_proc.stdin.write(silence_padding)
                     aplay_proc.stdin.flush()
-                except: pass
+                except Exception as e:
+                    logger.error(f"Failed to start aplay: {e}")
+                    aplay_proc = None
+                    TASK_CTRL.set_aplay(None)
+                    audio_queue.task_done()
+                    continue
 
             try:
                 aplay_proc.stdin.write(chunk)
                 aplay_proc.stdin.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                # 物理打断导致的管道破裂，静默处理并重置引用
+                aplay_proc = None
+                TASK_CTRL.set_aplay(None)
             except Exception as e:
                 logger.error(f"Playback Write Error: {e}")
+                # 发生意外错误，清理进程引用以便下次重建
+                try: aplay_proc.kill()
+                except: pass
+                aplay_proc = None
+                TASK_CTRL.set_aplay(None)
             
             audio_queue.task_done()
     finally:

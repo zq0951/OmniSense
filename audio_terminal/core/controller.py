@@ -27,11 +27,14 @@ class GlobalTaskController:
         
         self.stop_event.set()
         
-        if reason == "user_command":
-            logger.info("🧹 正在清空待播放队列...")
-            while not GLOBAL_TEXT_QUEUE.empty():
-                try: GLOBAL_TEXT_QUEUE.get_nowait(); GLOBAL_TEXT_QUEUE.task_done()
-                except: break
+        if reason in ["user_command", "reset"]:
+            if reason == "user_command":
+                logger.info("🧹 正在清空待任务队列...")
+                while not GLOBAL_TEXT_QUEUE.empty():
+                    try: GLOBAL_TEXT_QUEUE.get_nowait(); GLOBAL_TEXT_QUEUE.task_done()
+                    except: break
+            
+            # 无论是重置还是用户命令，都清空音频队列
             while not GLOBAL_AUDIO_QUEUE.empty():
                 try: GLOBAL_AUDIO_QUEUE.get_nowait(); GLOBAL_AUDIO_QUEUE.task_done()
                 except: break

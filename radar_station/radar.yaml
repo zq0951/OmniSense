@@ -1,0 +1,79 @@
+# ==============================================================================
+# OmniSense Radar Hardware Configuration (ESPHome)
+# 硬件方案：ESP32-C3 + LD2450 毫米波雷达
+# ==============================================================================
+# 🔌 接线说明 (Wiring Guide):
+# LD2450 VCC -> ESP32-C3 5V (或 3.3V，取决于模块版本)
+# LD2450 GND -> ESP32-C3 GND
+# LD2450 TX  -> ESP32-C3 (GPIO 5)
+# LD2450 RX  -> ESP32-C3 (GPIO 4)
+# ==============================================================================
+
+esphome:
+  name: omnisense-radar
+  friendly_name: "OmniSense 多目标雷达"
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+# 请在 secrets.yaml 中定义 wifi_ssid 和 wifi_password
+# 或者手动将下方替换为您的真实 WiFi 信息
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  output_power: 10dB # 降低发射功率可缓解瞬间功耗抖动导致的断连
+  power_save_mode: none # 关闭休眠，提高响应速度
+
+api:
+
+ota:
+  - platform: esphome
+
+logger:
+  level: INFO
+  baud_rate: 0 # 关闭硬件串口日志，防止干扰雷达通讯
+
+uart:
+  id: uart_bus
+  tx_pin: 4 # 对应 LD2450 的 RX
+  rx_pin: 5 # 对应 LD2450 的 TX
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+
+ld2450:
+  id: ld2450_radar
+  uart_id: uart_bus
+
+sensor:
+  - platform: ld2450
+    target_count:
+      name: "当前人数"
+
+    target_1:
+      x:
+        name: "目标1 X轴"
+      y:
+        name: "目标1 Y轴"
+      speed:
+        name: "目标1 速度"
+
+    target_2:
+      x:
+        name: "目标2 X轴"
+      y:
+        name: "目标2 Y轴"
+      speed:
+        name: "目标2 速度"
+
+    target_3:
+      x:
+        name: "目标3 X轴"
+      y:
+        name: "目标3 Y轴"
+      speed:
+        name: "目标3 速度"

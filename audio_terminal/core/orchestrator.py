@@ -47,7 +47,9 @@ async def stream_and_speak(user_text):
     
     voice_system_hint = (
         "（当前为语音通话场景，请直接使用口语化的纯文本进行回复，避免使用表格、复杂的Markdown列表、表情符号、标签。"
-        "所有的数值单位请转换为中文读音文字，如：将 15℃ 写作'15度'，将 95% 写作'百分之九十五'，将 10~20 写作'10到20'。）"
+        "所有的数值单位请转换为中文读音文字，如：将 15℃ 写作'15度'，将 95% 写作'百分之九十五'，将 10~20 写作'10到20'。）\n\n"
+        "【环境感知指令】：请先分析捕捉到的文本。如果你判断这并非是对你说的有效指令（例如是视频背景音、嘈杂环境下的碎片语音、或明显的误触），"
+        "请直接回复 `[IGNORE]`（必须完全匹配该字符串），不要产生任何其他输出。只有当你确信是在与你交流时才正常回复。"
     )
     
     from core.shared import INITIALIZED_SESSIONS
@@ -102,6 +104,13 @@ async def stream_and_speak(user_text):
                         if not chunk: continue
                         
                         full_response += chunk
+                        
+                        # 拦截幻觉/噪音判定：如果 LLM 回复了 [IGNORE]，立即中止本次处理
+                        if "[IGNORE]" in full_response:
+                            logger.info(f">> 拦截幻觉/噪音: {full_response.strip()}")
+                            # 确保清理可能已经入队的任何残余数据（理论上 [IGNORE] 会是第一个词）
+                            TASK_CTRL.request_stop(reason="reset")
+                            return
                         
                         # 处理中间标签拦截
                         actions = GLOBAL_ACTION_MGR.process_chunk(chunk)
