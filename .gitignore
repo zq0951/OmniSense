@@ -13,8 +13,7 @@ build/
 *.egg
 
 # ============ 模型权重与缓存 ============
-MOSS-TTS-Nano/hf_cache/
-MOSS-TTS-Nano/output/
+MOSS-TTS-Nano/
 voice-stack/whisper-models/
 audio_terminal/models/
 *.safetensors
