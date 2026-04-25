@@ -42,6 +42,17 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# 2. 检查第三方依赖代码 (针对开源克隆用户)
+if [ ! -d "MOSS-TTS-Nano" ]; then
+    warn "检测到缺少 MOSS-TTS-Nano 核心组件。正在尝试从 GitHub 克隆..."
+    git clone https://github.com/OpenMOSS/MOSS-TTS-Nano.git
+    if [ $? -ne 0 ]; then
+        error "克隆失败，请手动执行: git clone https://github.com/OpenMOSS/MOSS-TTS-Nano.git"
+        exit 1
+    fi
+    log "${GREEN}MOSS-TTS-Nano 已补齐。${NC}"
+fi
+
 function show_usage() {
     echo "用法: ./manage.sh [command] [options]"
     echo ""
