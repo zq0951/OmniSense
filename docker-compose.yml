@@ -1,0 +1,68 @@
+services:
+  # ===============================================
+  # 1. 外部依赖集成 (Voice & IoT)
+  # ===============================================
+  whisper-stt:
+    image: docker.1ms.run/fedirz/faster-whisper-server:latest-cpu
+    container_name: jarvis_whisper_stt
+    restart: unless-stopped
+    ports:
+      - "8081:8000"
+    environment:
+      - WHISPER__MODEL=small
+      - WHISPER__INFERENCE_DEVICE=cpu
+      - WHISPER__COMPUTE_TYPE=int8
+      - WHISPER__TTL=86400
+      - OMP_NUM_THREADS=8
+    volumes:
+      - ./voice-stack/whisper-models:/root/.cache/huggingface
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 2G
+
+  audio_terminal:
+    image: openclaw-smarthome-audio_terminal:latest
+    container_name: jarvis_audio_terminal
+    restart: unless-stopped
+    command: python /app/audio_terminal/main.py
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+    volumes:
+      - ./audio_terminal:/app/audio_terminal
+      - ./audio_terminal/models:/app/audio_terminal/models
+      - ./MOSS-TTS-Nano:/app/MOSS-TTS-Nano
+      - ./audio_terminal/logs:/app/audio_terminal/logs
+      - ./audio_terminal/hallucination_data:/app/audio_terminal/hallucination_data
+      - /etc/asound.conf:/etc/asound.conf
+    env_file:
+      - .env
+    deploy:
+      resources:
+        limits:
+          cpus: "10"
+          memory: 4G
+    environment:
+      - HF_HOME=/app/MOSS-TTS-Nano/hf_cache
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - OMP_NUM_THREADS=10
+      - MKL_NUM_THREADS=10
+    network_mode: "host"
+
+
+
+  radar_station:
+    profiles: ["radar"]
+    build: .
+    container_name: jarvis_radar_station
+    restart: unless-stopped
+    command: python /app/radar_station/radar_server.py
+    volumes:
+      - ./radar_station:/app/radar_station
+    env_file:
+      - .env
+    network_mode: "host"
+

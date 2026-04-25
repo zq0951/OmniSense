@@ -1,0 +1,53 @@
+# ============ 环境与密钥 ============
+.env
+.env.*
+!.env.example
+
+# ============ Python ============
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ============ 模型权重与缓存 ============
+MOSS-TTS-Nano/hf_cache/
+MOSS-TTS-Nano/output/
+voice-stack/whisper-models/
+audio_terminal/models/
+*.safetensors
+
+*.bin
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# ============ 日志与运行时数据 ============
+audio_terminal/logs/
+*.log
+*.jsonl
+
+# ============ 雷达数据与配置 ============
+radar_station/inventory.json
+radar_station/zones.json
+
+# ============ IDE ============
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============ OS ============
+.DS_Store
+Thumbs.db
+
+# ============ Docker 运行时 ============
+*.pid
+
+# ============ Gemini AI 上下文 ============
+.gemini/

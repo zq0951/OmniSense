@@ -1,0 +1,1824 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OmniSense Spatial Awareness | Radar Observer</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-color: #050505;
+        --accent-color: #00f2ff;
+        --grid-color: rgba(0, 242, 255, 0.05);
+        --card-bg: rgba(20, 20, 20, 0.8);
+        --text-primary: #ffffff;
+        --text-secondary: rgba(255, 255, 255, 0.5);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Outfit", sans-serif;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-primary);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Global Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--accent-color);
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #00d2df;
+      }
+
+      .background {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image:
+          linear-gradient(var(--grid-color) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+        background-size: 100px 100px;
+        background-position: center;
+        z-index: -1;
+      }
+
+      /* Header */
+      header {
+        position: absolute;
+        top: 40px;
+        left: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      h1 {
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        background: linear-gradient(90deg, #fff, var(--accent-color));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-family: "JetBrains Mono", monospace;
+        color: var(--text-secondary);
+      }
+
+      .dot {
+        width: 6px;
+        height: 6px;
+        background-color: #ff3e3e;
+        border-radius: 50%;
+        box-shadow: 0 0 10px #ff3e3e;
+      }
+
+      .dot.online {
+        background-color: var(--accent-color);
+        box-shadow: 0 0 10px var(--accent-color);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+
+        50% {
+          opacity: 0.4;
+        }
+
+        100% {
+          opacity: 1;
+        }
+      }
+
+      #radar-container {
+        position: relative;
+        width: 45vh;
+        aspect-ratio: 4 / 8;
+        background: radial-gradient(
+          circle at top left,
+          rgba(0, 242, 255, 0.05) 0%,
+          rgba(0, 0, 0, 0.6) 100%
+        );
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 20px auto;
+        overflow: visible;
+      }
+
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .info-panel {
+        position: absolute;
+        top: 40px;
+        right: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        width: 300px;
+        z-index: 10;
+      }
+
+      .inventory-panel {
+        /* Now part of info-panel */
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .inventory-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .inventory-tag {
+        background: rgba(0, 242, 255, 0.1);
+        border: 1px solid rgba(0, 242, 255, 0.3);
+        color: var(--accent-color);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase;
+      }
+
+      .inventory-tag:hover {
+        background: var(--accent-color);
+        color: #000;
+        box-shadow: 0 0 10px var(--accent-color);
+      }
+
+      #inventory-list {
+        max-height: 400px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .inv-list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 8px;
+        font-size: 12px;
+        font-family: "JetBrains Mono", monospace;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        border-left: 3px solid transparent;
+      }
+      .inv-list-item:hover {
+        background: rgba(0, 242, 255, 0.1);
+        border-left-color: var(--accent-color);
+        transform: translateX(5px);
+      }
+      .inv-list-item.low-stock .item-tag {
+        color: #ff3e3e;
+      }
+
+      /* Custom Scrollbar */
+      #inventory-list::-webkit-scrollbar,
+      #sub-items-container::-webkit-scrollbar,
+      div[style*="overflow-y: auto"]::-webkit-scrollbar {
+        width: 4px;
+      }
+      #inventory-list::-webkit-scrollbar-track,
+      #sub-items-container::-webkit-scrollbar-track,
+      div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+      }
+      #inventory-list::-webkit-scrollbar-thumb,
+      #sub-items-container::-webkit-scrollbar-thumb,
+      div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+        background: var(--accent-color);
+        border-radius: 10px;
+      }
+
+      /* Modal / Form */
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(5px);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-content {
+        background: #111;
+        border: 1px solid var(--accent-color);
+        padding: 30px;
+        border-radius: 12px;
+        width: 500px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        box-shadow: 0 0 30px rgba(0, 242, 255, 0.2);
+      }
+
+      .modal-header {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--accent-color);
+        margin-bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      #inventory-form input,
+      #inventory-form select,
+      #inventory-form textarea {
+        width: 100%;
+        background: #222;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 10px;
+        color: #fff;
+        border-radius: 4px;
+        margin-top: 5px;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .pc-only {
+        display: none;
+      }
+
+      @media (min-width: 1024px) {
+        .pc-only {
+          display: block;
+        }
+      }
+
+      .card {
+        background: var(--card-bg);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 20px;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .card-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+        font-weight: 600;
+      }
+
+      .target-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 13px;
+      }
+
+      .target-id {
+        color: var(--accent-color);
+      }
+
+      .target-pos {
+        color: var(--text-primary);
+      }
+
+      @media (max-width: 768px) {
+        header,
+        .info-panel,
+        #controls,
+        .calibration-panel {
+          display: none !important;
+        }
+
+        #radar-container {
+          width: 40vh;
+          margin: 40px auto 0;
+        }
+      }
+
+      #controls {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        display: flex;
+        gap: 15px;
+        z-index: 1000;
+      }
+
+      .calibration-panel {
+        position: fixed;
+        bottom: 100px;
+        right: 40px;
+        width: 280px;
+        z-index: 1000;
+        font-size: 12px;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        margin-bottom: 10px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent-color);
+      }
+
+      .val-display {
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-secondary);
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      .btn {
+        background: rgba(0, 242, 255, 0.15);
+        border: 1px solid var(--accent-color);
+        color: var(--accent-color);
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+        text-transform: uppercase;
+        transition: all 0.3s;
+      }
+
+      .btn:hover {
+        background: var(--accent-color);
+        color: #000;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="background"></div>
+
+    <header>
+      <h1>Spatial Core</h1>
+      <div class="status">
+        <div id="status-dot" class="dot"></div>
+        <span id="status-text">DISCONNECTED</span>
+      </div>
+    </header>
+
+    <div class="info-panel">
+      <div class="card">
+        <div class="card-title">Live Targets</div>
+        <div id="target-list">
+          <div style="color: rgba(255, 255, 255, 0.2); font-size: 12px">
+            Scanning...
+          </div>
+        </div>
+      </div>
+
+      <div class="inventory-panel">
+        <div class="card">
+          <div
+            class="card-title"
+            style="display: flex; justify-content: space-between"
+          >
+            Resource Stock
+            <span
+              class="pc-only"
+              style="cursor: pointer; color: var(--accent-color)"
+              onclick="openInventoryModal()"
+              >[+] MANAGE</span
+            >
+          </div>
+          <div id="inventory-list">
+            <div style="color: rgba(255, 255, 255, 0.2); font-size: 12px">
+              Loading items...
+            </div>
+          </div>
+          <!-- Tags removed from here as per request -->
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Room Bounds</div>
+        <div class="target-item"><span>X:</span><span>-5m to 5m</span></div>
+        <div class="target-item"><span>Y:</span><span>0m to 8m</span></div>
+      </div>
+    </div>
+
+    <div id="inventory-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <span id="modal-title">Inventory Item</span>
+          <span style="cursor: pointer" onclick="closeInventoryModal()">×</span>
+        </div>
+        <form id="inventory-form">
+          <input type="hidden" id="inv-id" />
+          <input type="hidden" id="inv-group-id-hidden" />
+          <div class="control-group">
+            <label>Item Name</label>
+            <input
+              type="text"
+              id="inv-name"
+              required
+              placeholder="e.g. Coffee"
+            />
+          </div>
+          <div class="form-row">
+            <div class="control-group">
+              <label id="quantity-label">Quantity</label>
+              <input type="number" id="inv-remaining" step="0.1" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="control-group">
+              <label>Map X (meters)</label>
+              <input type="number" id="inv-x" step="0.01" value="0" />
+            </div>
+            <div class="control-group">
+              <label>Map Y (meters)</label>
+              <input type="number" id="inv-y" step="0.01" value="0" />
+            </div>
+          </div>
+          <div class="control-group" id="group-join-container">
+            <label>Join Existing Group</label>
+            <select id="inv-group-join" onchange="joinSelectedGroup()">
+              <option value="">-- No Group (Independent) --</option>
+            </select>
+          </div>
+          <div
+            class="control-group"
+            id="group-name-container"
+            style="display: none"
+          >
+            <label>Group Name</label>
+            <input
+              type="text"
+              id="inv-group-name"
+              placeholder="e.g. Fridge Top Shelf"
+            />
+          </div>
+          <div class="form-row">
+            <div class="control-group">
+              <label>Counting Mode</label>
+              <select id="inv-type" onchange="toggleSubItemsUI()">
+                <option value="simple">Simple (Quantity Only)</option>
+                <option value="detailed">Detailed (Sub-item Capacity)</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Sub-item Unit</label>
+              <input type="text" id="inv-sub-unit" placeholder="e.g. ml, g" />
+            </div>
+          </div>
+          <div
+            id="sub-items-container"
+            style="
+              display: none;
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              padding: 10px;
+              border-radius: 4px;
+              max-height: 200px;
+              overflow-y: auto;
+              margin-top: 5px;
+            "
+          >
+            <label
+              style="
+                font-size: 11px;
+                color: var(--accent-color);
+                margin-bottom: 5px;
+                display: block;
+              "
+              >Individual Sub-item Status</label
+            >
+            <div id="sub-items-list"></div>
+          </div>
+          <div class="control-group">
+            <label>Details</label>
+            <textarea id="inv-details" rows="2"></textarea>
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 10px">
+            <button type="submit" class="btn" style="flex: 2">Save Item</button>
+            <button
+              type="button"
+              class="btn"
+              id="delete-btn"
+              style="
+                flex: 1;
+                border-color: #ff3e3e;
+                color: #ff3e3e;
+                display: none;
+              "
+              onclick="deleteItem()"
+            >
+              Delete
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="detail-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <span id="detail-name">Item Details</span>
+          <span style="cursor: pointer" onclick="closeDetailModal()">×</span>
+        </div>
+        <div
+          id="detail-content"
+          style="
+            font-family: &quot;JetBrains Mono&quot;;
+            font-size: 14px;
+            line-height: 1.6;
+          "
+        >
+          <!-- Content injected here -->
+        </div>
+        <div style="margin-top: 20px; display: flex; gap: 10px">
+          <button class="btn pc-only" id="edit-btn" onclick="editCurrentItem()">
+            Edit Data
+          </button>
+          <button class="btn" onclick="closeDetailModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="radar-container">
+      <svg
+        id="floorPlan"
+        viewBox="-2 -2 404 804"
+        preserveAspectRatio="xMidYMid meet"
+        style="
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          opacity: 0.6;
+          pointer-events: none;
+        "
+      >
+        <path
+          d="M 1 1 L 399 1 L 399 799 L 1 799 Z"
+          fill="none"
+          stroke="rgba(0, 242, 255, 0.3)"
+          stroke-width="2"
+        />
+        <!-- Static Wall between Desk and Fridge -->
+        <rect
+          x="10"
+          y="520"
+          width="100"
+          height="30"
+          fill="rgba(255, 255, 255, 0.1)"
+          stroke="rgba(255, 255, 255, 0.2)"
+          stroke-width="1"
+        />
+        <!-- Dynamic Zones will be injected here -->
+        <g id="dynamic-zones"></g>
+
+        <line
+          x1="110"
+          y1="798"
+          x2="210"
+          y2="798"
+          stroke="#00f2ff"
+          stroke-width="4"
+        />
+        <line x1="80" y1="2" x2="350" y2="2" stroke="#fff" stroke-width="2" />
+        <circle cx="0" cy="0" r="10" fill="rgba(0, 242, 255, 0.4)" />
+        <circle
+          cx="0"
+          cy="0"
+          r="20"
+          fill="none"
+          stroke="#00f2ff"
+          stroke-width="1"
+          stroke-dasharray="5,5"
+        >
+          <animate
+            attributeName="r"
+            from="10"
+            to="30"
+            dur="2s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            from="1"
+            to="0"
+            dur="2s"
+            repeatCount="indefinite"
+          />
+        </circle>
+      </svg>
+      <canvas id="gridCanvas"></canvas>
+      <canvas id="radarCanvas"></canvas>
+    </div>
+
+    <div id="controls">
+      <button
+        class="btn"
+        id="drag-toggle"
+        onclick="toggleDragMode()"
+        style="border-color: #aaa; color: #aaa"
+      >
+        Map Edit: OFF
+      </button>
+      <button class="btn" onclick="clearTrails()">Clear Trace</button>
+      <button class="btn" onclick="toggleCalib()">Calibration</button>
+    </div>
+
+    <div id="calib-panel" class="calibration-panel card" style="display: none">
+      <div class="card-title">Real-time Calibration</div>
+
+      <div class="control-group">
+        <div class="val-display">
+          <span>Rotation (θ)</span><span id="v-rot">0°</span>
+        </div>
+        <input type="range" id="i-rot" min="-180" max="180" value="0" />
+      </div>
+
+      <div class="control-group">
+        <div class="val-display">
+          <span>Scale</span><span id="v-scale">1.0</span>
+        </div>
+        <input
+          type="range"
+          id="i-scale"
+          min="0.5"
+          max="3.0"
+          step="0.1"
+          value="1.0"
+        />
+      </div>
+
+      <div class="control-group">
+        <div class="val-display">
+          <span>X Offset</span><span id="v-ox">0.0m</span>
+        </div>
+        <input type="range" id="i-ox" min="-5" max="5" step="0.1" value="0" />
+      </div>
+
+      <div class="control-group">
+        <div class="val-display">
+          <span>Y Offset</span><span id="v-oy">0.0m</span>
+        </div>
+        <input type="range" id="i-oy" min="-5" max="5" step="0.1" value="0" />
+      </div>
+
+      <label
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: var(--text-secondary);
+        "
+      >
+        <input type="checkbox" id="i-mirrorx" /> Mirror X Axis
+      </label>
+      <label
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: var(--text-secondary);
+          margin-top: 5px;
+        "
+      >
+        <input type="checkbox" id="i-mirrory" /> Mirror Y Axis
+      </label>
+    </div>
+
+    <script>
+      const varAccent = "#00f2ff";
+      const gridCanvas = document.getElementById("gridCanvas");
+      const radarCanvas = document.getElementById("radarCanvas");
+      const targetList = document.getElementById("target-list");
+      const statusDot = document.getElementById("status-dot");
+      const statusText = document.getElementById("status-text");
+      const gctx = gridCanvas.getContext("2d");
+      const ctx = radarCanvas.getContext("2d");
+
+      let width, height, scaleX, scaleY;
+      let targets = {};
+      let targetTrails = {}; // Stores trails for each target ID
+      const MAX_TRAIL_POINTS = 50000;
+      let eventSource = null;
+
+      // ZONES will be fetched from backend
+      let ZONES = {};
+      let activeZone = null;
+
+      async function fetchConfig() {
+        try {
+          const resp = await fetch("/api/radar/zones");
+          ZONES = await resp.json();
+          console.log("Zones Loaded:", ZONES);
+          renderFloorPlanZones();
+        } catch (e) {
+          console.error("Failed to load zones:", e);
+        }
+      }
+
+      function renderFloorPlanZones() {
+        const container = document.getElementById("dynamic-zones");
+        if (!container) return;
+        container.innerHTML = "";
+
+        Object.entries(ZONES).forEach(([zid, config]) => {
+          const d = config.display;
+          const a = config.active;
+
+          // 1. Draw Active Boundary (Dashed Line - Larger)
+          //   const ax = a.x[0] * 100;
+          //   const ay = a.y[0] * 100;
+          //   const aw = (a.x[1] - a.x[0]) * 100;
+          //   const ah = (a.y[1] - a.y[0]) * 100;
+
+          //   const activeRect = document.createElementNS(
+          //     "http://www.w3.org/2000/svg",
+          //     "rect",
+          //   );
+          //   activeRect.setAttribute("x", ax);
+          //   activeRect.setAttribute("y", ay);
+          //   activeRect.setAttribute("width", aw);
+          //   activeRect.setAttribute("height", ah);
+          //   activeRect.setAttribute("fill", "none");
+          //   activeRect.setAttribute("stroke", "rgba(255, 255, 255, 0.1)");
+          //   activeRect.setAttribute("stroke-width", "1");
+          //   activeRect.setAttribute("stroke-dasharray", "4,4");
+          //   container.appendChild(activeRect);
+
+          // 2. Draw Display Boundary (Solid Line - Visual)
+          const dx = d.x[0] * 100;
+          const dy = d.y[0] * 100;
+          const dw = (d.x[1] - d.x[0]) * 100;
+          const dh = (d.y[1] - d.y[0]) * 100;
+
+          const displayRect = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "rect",
+          );
+          displayRect.setAttribute("x", dx);
+          displayRect.setAttribute("y", dy);
+          displayRect.setAttribute("width", dw);
+          displayRect.setAttribute("height", dh);
+          displayRect.setAttribute("fill", "rgba(0, 242, 255, 0.05)");
+          displayRect.setAttribute("stroke", "rgba(0, 242, 255, 0.2)");
+          displayRect.setAttribute("stroke-width", "1");
+          container.appendChild(displayRect);
+
+          const text = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "text",
+          );
+          text.setAttribute("x", dx + 10);
+          text.setAttribute("y", dy + 30);
+          text.setAttribute("fill", "rgba(255,255,255,0.3)");
+          text.setAttribute("font-size", "14");
+          text.textContent = config.label || zid;
+          container.appendChild(text);
+        });
+      }
+
+      function resize() {
+        width = radarCanvas.parentElement.clientWidth;
+        height = radarCanvas.parentElement.clientHeight;
+        gridCanvas.width = radarCanvas.width = width;
+        gridCanvas.height = radarCanvas.height = height;
+        scaleX = width / 4.0;
+        scaleY = height / 8.0;
+      }
+
+      window.addEventListener("resize", resize);
+      resize();
+
+      function clearTrails() {
+        targetTrails = {};
+      }
+
+      const iRot = document.getElementById("i-rot");
+      const iScale = document.getElementById("i-scale");
+      const iOx = document.getElementById("i-ox");
+      const iOy = document.getElementById("i-oy");
+      const iMirrorX = document.getElementById("i-mirrorx");
+      const iMirrorY = document.getElementById("i-mirrory");
+
+      function toggleCalib() {
+        const p = document.getElementById("calib-panel");
+        p.style.display = p.style.display === "none" ? "flex" : "none";
+      }
+
+      // Utility Helpers for Inventory Ratios
+      function getMinRatio(item) {
+        if (
+          item.type === "detailed" &&
+          item.sub_items &&
+          item.sub_items.length > 0
+        ) {
+          return Math.min(
+            ...item.sub_items.map((s) => (s.t > 0 ? s.r / s.t : 1)),
+          );
+        }
+        return 1; // Simple items don't have a ratio anymore
+      }
+
+      function calculateRatio(item) {
+        if (
+          item.type === "detailed" &&
+          item.sub_items &&
+          item.sub_items.length > 0
+        ) {
+          const sumR = item.sub_items.reduce((a, b) => a + b.r, 0);
+          const sumT = item.sub_items.reduce((a, b) => a + b.t, 0);
+          return sumT > 0 ? sumR / sumT : 1;
+        }
+        return 1;
+      }
+
+      function updateInventoryListUI() {
+        const container = document.getElementById("inventory-list");
+        if (!container) return;
+
+        const groups = calculateGroups();
+
+        container.innerHTML =
+          inventory
+            .map((item) => {
+              const countStr =
+                item.remaining > 1 ? ` (${item.remaining}个)` : "";
+              const minR = getMinRatio(item);
+              const percent = (minR * 100).toFixed(0);
+              const percentStr =
+                item.type === "detailed" ? ` [${percent}%]` : "";
+              const isLow = minR < 0.2;
+
+              // Check if this item is in a manual group
+              const hasGid =
+                item.groupId !== null &&
+                item.groupId !== undefined &&
+                item.groupId !== "";
+              let gName = "";
+              if (hasGid) {
+                const group = groups.find((g) => g.id === item.groupId);
+                gName =
+                  groupsData[item.groupId]?.name ||
+                  group?.items[0]?.name ||
+                  "GROUP";
+              }
+              const groupStr = hasGid
+                ? `<span style="color: #ffcc00; font-size: 9px; margin-right: 4px; font-weight: 800;">[${gName}]</span>`
+                : "";
+
+              return `
+                    <div class="inv-list-item ${isLow ? "low-stock" : ""}" onclick="openInventoryModal('${item.id}')">
+                        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
+                            <span class="item-tag" style="white-space: normal; line-height: 1.2;">${groupStr}${item.name}${countStr}</span>
+                            <span style="font-size: 9px; color: rgba(0, 242, 255, 0.4); letter-spacing: 0.5px; font-weight: 600;">@${item.zone_label || item.zone || "UNKNOWN"}</span>
+                        </div>
+                        <span class="item-percent" style="margin-left: 8px;">${percentStr}</span>
+                    </div>
+                `;
+            })
+            .join("") ||
+          '<div style="color: rgba(255,255,255,0.2); font-size: 11px;">No items in stock.</div>';
+      }
+
+      function animate() {
+        const now = Date.now();
+        ctx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
+        let listHtml = "";
+
+        // Get calibration values
+        const rot = (parseFloat(iRot.value) * Math.PI) / 180;
+        const scale = parseFloat(iScale.value);
+        const ox = parseFloat(iOx.value);
+        const oy = parseFloat(iOy.value);
+        const mX = iMirrorX.checked ? -1 : 1;
+        const mY = iMirrorY.checked ? -1 : 1;
+
+        // Update displays
+        document.getElementById("v-rot").innerText = iRot.value + "°";
+        document.getElementById("v-scale").innerText = scale;
+        document.getElementById("v-ox").innerText = ox + "m";
+        document.getElementById("v-oy").innerText = oy + "m";
+
+        // Helper to project raw meters back to screen using current sliders
+        const project = (m) => {
+          const prx = m.x * Math.cos(rot) - m.y * Math.sin(rot);
+          const pry = m.x * Math.sin(rot) + m.y * Math.cos(rot);
+          const px = prx * scale * mX * scaleX + ox * scaleX;
+          const py = pry * scale * mY * scaleY + oy * scaleY;
+          return { x: px, y: py };
+        };
+
+        // 1. Draw ALL historical trails (even if target is gone)
+        Object.keys(targetTrails).forEach((tid) => {
+          const trail = targetTrails[tid];
+          if (trail.length < 2) return;
+
+          const target = targets[tid];
+          const isActive = !!target;
+          const isPrimary = target && target.isPrimary;
+
+          ctx.beginPath();
+          const firstPt = project(trail[0]);
+          ctx.moveTo(firstPt.x, firstPt.y);
+          for (let i = 1; i < trail.length; i++) {
+            const pt = project(trail[i]);
+            ctx.lineTo(pt.x, pt.y);
+          }
+          ctx.strokeStyle = isActive
+            ? `rgba(0, 242, 255, ${isPrimary ? 0.3 : 0.1})`
+            : `rgba(255, 255, 255, 0.05)`;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Draw dots for active or primary only to reduce clutter
+          if (isActive) {
+            trail.forEach((m) => {
+              const pt = project(m);
+              ctx.fillStyle = `rgba(0, 242, 255, ${isPrimary ? 0.4 : 0.1})`;
+              ctx.fillRect(pt.x, pt.y, 1, 1);
+            });
+          }
+        });
+
+        // Draw Perception Zones
+        activeZone = null;
+        Object.entries(ZONES).forEach(([zid, zconfig]) => {
+          const d = zconfig.display;
+          const a = zconfig.active;
+
+          const zX = d.x[0] * scaleX;
+          const zY = d.y[0] * scaleY;
+          const zW = (d.x[1] - d.x[0]) * scaleX;
+          const zH = (d.y[1] - d.y[0]) * scaleY;
+
+          // Check if ANY active target is inside the ACTIVE bounds (logical)
+          const isOccupied = Object.values(targets).some(
+            (t) =>
+              t.x >= a.x[0] && t.x <= a.x[1] && t.y >= a.y[0] && t.y <= a.y[1],
+          );
+
+          if (isOccupied) activeZone = zid;
+
+          // Draw display zone box (on canvas for active state effect)
+          if (isOccupied) {
+            ctx.save();
+            ctx.setLineDash([5, 5]);
+            ctx.lineWidth = 2;
+            const pulse = (Math.sin(now / 300) + 1) / 2;
+            ctx.strokeStyle = `rgba(0, 242, 255, ${0.4 + pulse * 0.5})`;
+            ctx.fillStyle = `rgba(0, 242, 255, ${0.1 + pulse * 0.15})`;
+            ctx.shadowBlur = 20 * pulse;
+            ctx.shadowColor = "#00f2ff";
+            // ctx.strokeRect(zX, zY, zW, zH);
+            ctx.fillRect(zX, zY, zW, zH);
+            ctx.restore();
+          }
+        });
+
+        // 2. Draw Current Targets & Update Trails
+        Object.values(targets).forEach((target) => {
+          const pos = project(target);
+          const screenX = pos.x;
+          const screenY = pos.y;
+
+          const finalX = screenX / scaleX;
+          const finalY = screenY / scaleY;
+
+          const alpha = target.isPrimary ? 1 : 0.3;
+          const glowColor = target.isPrimary
+            ? "#ff4400"
+            : "rgba(0, 242, 255, 0.3)";
+
+          // Update trail if distance moved is significant (> 0.02 meters)
+          if (!targetTrails[target.id]) targetTrails[target.id] = [];
+          const lastPointMeters =
+            targetTrails[target.id][targetTrails[target.id].length - 1];
+          if (
+            !lastPointMeters ||
+            Math.hypot(
+              lastPointMeters.x - target.x,
+              lastPointMeters.y - target.y,
+            ) > 0.02
+          ) {
+            targetTrails[target.id].push({ x: target.x, y: target.y });
+            if (targetTrails[target.id].length > MAX_TRAIL_POINTS)
+              targetTrails[target.id].shift();
+          }
+
+          // Draw current position marker
+          ctx.shadowBlur = target.isPrimary ? 15 : 0;
+          ctx.shadowColor = glowColor;
+          ctx.fillStyle = glowColor;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, 6, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (target.isPrimary) {
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#fff";
+            ctx.font = "12px JetBrains Mono";
+            ctx.fillText(`Target ${target.id}`, screenX + 15, screenY - 15);
+            ctx.fillStyle = "rgba(255,255,255,0.5)";
+            ctx.fillText(
+              `[${finalX.toFixed(2)}, ${finalY.toFixed(2)}] V:${target.v.toFixed(1)}`,
+              screenX + 15,
+              screenY,
+            );
+          }
+
+          listHtml += `<div class="target-item" style="opacity: ${alpha}"><span class="target-id">#${target.id}</span><span class="target-pos">${finalX.toFixed(1)}, ${finalY.toFixed(1)}m</span></div>`;
+        });
+
+        // Draw Inventory Items & Groups on Map
+        const groups = calculateGroups();
+        hitBoxes = []; // Clear for this frame
+        const processedItemIds = new Set();
+
+        groups.forEach((group, index) => {
+          const isManualGroup = group.id !== undefined;
+          const leadItem = group.items[0];
+          const ix = group.x * scaleX;
+          const iy = group.y * scaleY;
+
+          const getMinRatio = (item) => {
+            if (
+              item.type === "detailed" &&
+              item.sub_items &&
+              item.sub_items.length > 0
+            ) {
+              return Math.min(
+                ...item.sub_items.map((s) => (s.t > 0 ? s.r / s.t : 1)),
+              );
+            }
+            return 1;
+          };
+
+          const calculateRatio = (item) => {
+            if (
+              item.type === "detailed" &&
+              item.sub_items &&
+              item.sub_items.length > 0
+            ) {
+              const sumR = item.sub_items.reduce((a, b) => a + b.r, 0);
+              const sumT = item.sub_items.reduce((a, b) => a + b.t, 0);
+              return sumT > 0 ? sumR / sumT : 1;
+            }
+            return 1;
+          };
+
+          const avgRatio =
+            group.items.reduce((acc, item) => acc + calculateRatio(item), 0) /
+            group.items.length;
+          const groupMinRatio = Math.min(...group.items.map(getMinRatio));
+          const color =
+            groupMinRatio < 0.2
+              ? "#ff3e3e"
+              : !isManualGroup
+                ? varAccent
+                : "#ffcc00";
+
+          ctx.save();
+          ctx.fillStyle = color;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = color;
+
+          if (!isManualGroup) {
+            const countStr =
+              leadItem.remaining > 1 ? ` (${leadItem.remaining}个)` : "";
+            const percentStr =
+              leadItem.type === "detailed"
+                ? ` [${(getMinRatio(leadItem) * 100).toFixed(0)}%]`
+                : "";
+
+            ctx.beginPath();
+            ctx.arc(ix, iy, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.font = "10px JetBrains Mono";
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            ctx.fillText(
+              `${leadItem.name}${countStr}${percentStr}`,
+              ix + 8,
+              iy + 4,
+            );
+          } else {
+            // Manual Group Styling
+            ctx.beginPath();
+            ctx.arc(ix, iy, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            ctx.font = "bold 10px JetBrains Mono";
+            ctx.fillStyle = "#fff";
+            let gDispName =
+              groupsData[group.id]?.name || leadItem.name || "GROUP";
+            ctx.fillText(
+              `${gDispName} [${group.items.length}]`,
+              ix + 10,
+              iy + 4,
+            );
+          }
+
+          // Dynamic Hit Area calculation
+          const labelText = group.id
+            ? `${groupsData[group.id]?.name || leadItem.name} [${group.items.length}]`
+            : `${leadItem.name}${leadItem.remaining > 1 ? ` (${leadItem.remaining}个)` : ""}${leadItem.type === "detailed" ? ` [${(getMinRatio(leadItem) * 100).toFixed(0)}%]` : ""}`;
+          const tw = ctx.measureText(labelText).width;
+          const hitW = tw + 25; // Base circle + text width
+
+          // Store hit box for listeners (using pixel coords)
+          hitBoxes.push({
+            id: group.id || leadItem.id,
+            ix: ix,
+            iy: iy,
+            w: hitW,
+            group: group,
+          });
+
+          // PRESS FEEDBACK
+          const thisId = group.id || group.items[0].id;
+          if (activeHitId === thisId) {
+            ctx.beginPath();
+            ctx.arc(ix, iy, 12, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          if (avgRatio < 0.2) {
+            ctx.beginPath();
+            ctx.arc(ix, iy, 8 + Math.sin(now / 200) * 4, 0, Math.PI * 2);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+          ctx.restore();
+        });
+
+        targetList.innerHTML =
+          listHtml ||
+          '<div style="color: rgba(255,255,255,0.2);">Scanning...</div>';
+        requestAnimationFrame(animate);
+      }
+
+      // Map Interaction (Clicks & Dragging)
+      let hitBoxes = []; // Dynamic hit boxes for precision clicking
+      let activeHitId = null;
+      let isDragging = false;
+      let draggedItem = null;
+      let dragMode = false;
+
+      function toggleDragMode() {
+        dragMode = !dragMode;
+        const btn = document.getElementById("drag-toggle");
+        btn.innerText = `Map Edit: ${dragMode ? "ON" : "OFF"}`;
+        btn.style.borderColor = dragMode ? varAccent : "#aaa";
+        btn.style.color = dragMode ? varAccent : "#aaa";
+        radarCanvas.style.cursor = dragMode ? "crosshair" : "default";
+      }
+
+      radarCanvas.addEventListener("mousedown", (e) => {
+        const rect = radarCanvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+
+        const found = hitBoxes.find((box) => {
+          const dx = cx - box.ix;
+          const dy = cy - box.iy;
+          // Precise check against dynamic hit box
+          return (
+            Math.hypot(dx, dy) < 20 ||
+            (dx >= 0 && dx <= box.w && Math.abs(dy) < 15)
+          );
+        });
+
+        if (found) {
+          activeHitId = found.id;
+          if (dragMode) {
+            isDragging = true;
+            draggedItem = found.group.items[0];
+            radarCanvas.style.cursor = "grabbing";
+          }
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isDragging || !draggedItem) return;
+        const rect = radarCanvas.getBoundingClientRect();
+        const nextX = (e.clientX - rect.left) / scaleX;
+        const nextY = (e.clientY - rect.top) / scaleY;
+
+        const group = calculateGroups().find((g) =>
+          g.items.some((it) => it.id === draggedItem.id),
+        );
+        if (group && group.items.length > 1) {
+          const dx = nextX - draggedItem.x;
+          const dy = nextY - draggedItem.y;
+          group.items.forEach((it) => {
+            it.x += dx;
+            it.y += dy;
+          });
+        } else {
+          draggedItem.x = nextX;
+          draggedItem.y = nextY;
+        }
+      });
+      window.addEventListener("mouseup", async () => {
+        activeHitId = null;
+        if (isDragging && draggedItem) {
+          isDragging = false;
+          radarCanvas.style.cursor = dragMode ? "crosshair" : "default";
+
+          // Save new position with 2 decimal precision
+          draggedItem.x = Number(draggedItem.x.toFixed(2));
+          draggedItem.y = Number(draggedItem.y.toFixed(2));
+
+          try {
+            await fetch(`/api/inventory/${draggedItem.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(draggedItem),
+            });
+          } catch (e) {
+            console.error("Failed to save drag position:", e);
+          }
+          draggedItem = null;
+          fetchInventory(); // Refresh UI to show new groups
+        }
+      });
+
+      radarCanvas.addEventListener("click", (e) => {
+        if (dragMode) return;
+        const rect = radarCanvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+
+        const clicked = hitBoxes.find((box) => {
+          const dx = cx - box.ix;
+          const dy = cy - box.iy;
+          return (
+            Math.hypot(dx, dy) < 20 ||
+            (dx >= 0 && dx <= box.w && Math.abs(dy) < 15)
+          );
+        });
+
+        if (clicked) {
+          const group = clicked.group;
+          if (group.items.length === 1) {
+            showItemDetails(group.items[0].id);
+          } else {
+            showGroupDetails(group);
+          }
+        }
+      });
+
+      const GROUP_THRESHOLD = 0.01; // meters - effectively only groups items at exact same spot
+
+      function calculateGroups() {
+        const groups = [];
+        const groupMap = {};
+
+        inventory.forEach((item) => {
+          if (item.x === undefined || item.y === undefined) return;
+
+          if (item.groupId) {
+            if (!groupMap[item.groupId]) {
+              groupMap[item.groupId] = {
+                x: item.x,
+                y: item.y,
+                items: [],
+                id: item.groupId,
+              };
+              groups.push(groupMap[item.groupId]);
+            }
+            groupMap[item.groupId].items.push(item);
+          } else {
+            // Individual item (not in a manual group)
+            groups.push({
+              x: item.x,
+              y: item.y,
+              items: [item],
+            });
+          }
+        });
+
+        return groups;
+      }
+
+      function showGroupDetails(group) {
+        const detailModal = document.getElementById("detail-modal");
+        document.getElementById("detail-name").innerText =
+          `Item Group (${group.items.length} items)`;
+
+        let listHtml =
+          '<div style="max-height: 300px; overflow-y: auto; padding-right: 5px;">';
+        group.items.forEach((item) => {
+          const ratio = calculateRatio(item);
+          const color = ratio < 0.2 ? "#ff3e3e" : "#00f2ff";
+          listHtml += `
+                    <div style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600; color: ${color}">${item.name}</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.5)">
+                                ${item.type === "detailed" ? `${item.remaining} containers` : `${item.remaining} units`}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <button class="btn" style="padding: 4px 8px; font-size: 10px;" onclick="closeDetailModal(); showItemDetails('${item.id}')">View</button>
+                            <button class="btn" style="padding: 4px 8px; font-size: 10px; border-color: #ff3e3e; color: #ff3e3e;" onclick="ungroupItem('${item.id}')">Depart</button>
+                        </div>
+                    </div>
+                `;
+        });
+        listHtml += "</div>";
+
+        document.getElementById("detail-content").innerHTML = listHtml;
+        // Hide edit button for group
+        document.getElementById("edit-btn").style.display = "none";
+        detailModal.style.display = "flex";
+      }
+
+      async function ungroupItem(itemId) {
+        const item = inventory.find((i) => i.id === itemId);
+        if (!item) return;
+
+        // Remove groupId and slightly offset to separate visually
+        item.groupId = null;
+        item.x = Number((item.x + 0.1).toFixed(2));
+        item.y = Number((item.y + 0.1).toFixed(2));
+
+        try {
+          await fetch(`/api/inventory/${item.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(item),
+          });
+          closeDetailModal();
+          fetchInventory();
+        } catch (e) {
+          console.error("Failed to ungroup item:", e);
+        }
+      }
+
+      function connect() {
+        statusText.innerText = "CONNECTING...";
+        eventSource = new EventSource("/api/radar/stream");
+        eventSource.onopen = () => {
+          statusText.innerText = "ACTIVE";
+          statusDot.className = "dot online";
+        };
+        eventSource.onmessage = (event) => {
+          const payload = JSON.parse(event.data);
+
+          if (payload.type === "history") {
+            // Populate trails from server history (stored as meters)
+            payload.points.forEach((p) => {
+              if (!targetTrails[p.id]) targetTrails[p.id] = [];
+              targetTrails[p.id].push({ x: p.x, y: p.y });
+            });
+            return;
+          }
+
+          const data = payload.targets;
+          const reportedCount = payload.count;
+          statusText.innerText = `ACTIVE | COUNT: ${reportedCount}`;
+          const newTargets = {};
+          data.forEach((t, idx) => {
+            t.isPrimary = idx < reportedCount;
+            newTargets[t.id] = t;
+          });
+          targets = newTargets;
+        };
+        eventSource.onerror = () => {
+          statusDot.className = "dot";
+          setTimeout(connect, 3000);
+        };
+      }
+      let inventory = [];
+      let selectedItem = null;
+
+      async function fetchInventory() {
+        try {
+          const resp = await fetch("/api/inventory");
+          inventory = await resp.json();
+          updateInventoryListUI();
+        } catch (e) {
+          console.error("Failed to fetch inventory:", e);
+        }
+      }
+
+      function showItemDetails(id) {
+        selectedItem = inventory.find((i) => i.id === id);
+        if (!selectedItem) return;
+
+        const detailModal = document.getElementById("detail-modal");
+        document.getElementById("detail-name").innerText = selectedItem.name;
+
+        let statusHtml = "";
+        if (selectedItem.type === "detailed" && selectedItem.sub_items) {
+          const sumR = selectedItem.sub_items.reduce((a, b) => a + b.r, 0);
+          const sumT = selectedItem.sub_items.reduce((a, b) => a + b.t, 0);
+          const percent = sumT > 0 ? ((sumR / sumT) * 100).toFixed(1) : 0;
+
+          statusHtml = `
+                    <div style="margin-bottom: 10px; color: ${percent < 20 ? "#ff3e3e" : "#fff"}">
+                        <strong>Total Fill: ${percent}% (${selectedItem.remaining}个)</strong>
+                    </div>
+                    <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid rgba(255,255,255,0.1); padding: 5px;">
+                        ${selectedItem.sub_items
+                          .map(
+                            (sub, i) => `
+                            <div style="font-size: 11px; margin-bottom: 5px; display: flex; justify-content: space-between;">
+                                <span>Item #${i + 1}: ${sub.r} / ${sub.t} ${selectedItem.sub_unit || ""}</span>
+                                <div style="width: 60px; height: 4px; background: #333; margin-top: 5px;">
+                                    <div style="width: ${(sub.r / sub.t) * 100}%; height: 100%; background: var(--accent-color);"></div>
+                                </div>
+                            </div>
+                        `,
+                          )
+                          .join("")}
+                    </div>
+                `;
+        } else {
+          statusHtml = `
+                    <div style="margin-bottom: 10px; color: #fff">
+                        <strong>Quantity: ${selectedItem.remaining} 个</strong>
+                    </div>
+                `;
+        }
+
+        const hasGid =
+          selectedItem.groupId !== null &&
+          selectedItem.groupId !== undefined &&
+          selectedItem.groupId !== "";
+        const gInfoHtml = hasGid
+          ? `
+                <div style="margin-top: 10px; padding: 8px; background: rgba(255, 204, 0, 0.1); border-left: 3px solid #ffcc00;">
+                    <strong style="color: #ffcc00;">Group: ${groupsData[selectedItem.groupId]?.name || selectedItem.name}</strong><br>
+                    <span style="font-size: 11px; opacity: 0.8;">Group ID: ${selectedItem.groupId}</span>
+                    <button class="btn" style="padding: 2px 8px; font-size: 10px; margin-top: 5px; background: transparent; border-color: #ffcc00; color: #ffcc00;" onclick="ungroupItem('${selectedItem.id}')">Depart Group</button>
+                </div>
+            `
+          : "";
+
+        document.getElementById("detail-content").innerHTML = `
+                ${statusHtml}
+                ${gInfoHtml}
+                <div style="color: var(--text-secondary); margin-top: 10px;">
+                    Type: ${selectedItem.type === "detailed" ? "Detailed" : "Simple"}<br>
+                    ID: ${selectedItem.id}
+                </div>
+                <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    ${selectedItem.details || "No additional details."}
+                </div>
+            `;
+        document.getElementById("edit-btn").style.display = "block";
+        detailModal.style.display = "flex";
+      }
+
+      function closeDetailModal() {
+        document.getElementById("detail-modal").style.display = "none";
+      }
+
+      let groupsData = {};
+      async function fetchGroups() {
+        try {
+          const resp = await fetch("/api/groups");
+          groupsData = await resp.json();
+        } catch (e) {
+          console.error("Failed to fetch groups:", e);
+        }
+      }
+
+      function joinSelectedGroup() {
+        const select = document.getElementById("inv-group-join");
+        const nameContainer = document.getElementById("group-name-container");
+        const nameInput = document.getElementById("inv-group-name");
+
+        if (!select.value) {
+          document.getElementById("inv-group-id-hidden").value = "";
+          nameContainer.style.display = "none";
+          return;
+        }
+        const [gx, gy, gid] = select.value.split("|");
+        document.getElementById("inv-x").value = gx;
+        document.getElementById("inv-y").value = gy;
+        document.getElementById("inv-group-id-hidden").value = gid;
+
+        // Show group name field
+        nameContainer.style.display = "block";
+        nameInput.value = (groupsData[gid] && groupsData[gid].name) || "";
+      }
+
+      async function openInventoryModal(id = null) {
+        const modal = document.getElementById("inventory-modal");
+        const form = document.getElementById("inventory-form");
+        const delBtn = document.getElementById("delete-btn");
+
+        // Populate Group Dropdown
+        const groupSelect = document.getElementById("inv-group-join");
+        groupSelect.innerHTML =
+          '<option value="">-- No Group (Independent) --</option>';
+
+        const existingGroups = {};
+        if (id) {
+          const item = inventory.find((i) => i.id === id);
+          if (!item.groupId) {
+            const selfOpt = document.createElement("option");
+            selfOpt.value = `${item.x}|${item.y}|${item.id}`;
+            selfOpt.innerText = `★ Create New Group from this Item`;
+            groupSelect.appendChild(selfOpt);
+          }
+        }
+
+        inventory.forEach((item) => {
+          if (item.groupId) {
+            if (!existingGroups[item.groupId]) {
+              const gName =
+                (groupsData[item.groupId] && groupsData[item.groupId].name) ||
+                item.name;
+              existingGroups[item.groupId] = {
+                name: gName,
+                x: item.x,
+                y: item.y,
+              };
+            }
+          }
+        });
+
+        inventory.forEach((item) => {
+          if (!item.groupId && item.id !== id) {
+            const option = document.createElement("option");
+            option.value = `${item.x}|${item.y}|${item.id}`;
+            option.innerText = `Group with: ${item.name} (@ ${item.x}, ${item.y})`;
+            groupSelect.appendChild(option);
+          }
+        });
+
+        Object.entries(existingGroups).forEach(([gid, info]) => {
+          const option = document.createElement("option");
+          option.value = `${info.x}|${info.y}|${gid}`;
+          option.innerText = `Group: ${info.name} (@ ${info.x}, ${info.y})`;
+          groupSelect.appendChild(option);
+        });
+
+        if (id) {
+          const item = inventory.find((i) => i.id === id);
+          document.getElementById("modal-title").innerText = "Edit Item";
+          document.getElementById("inv-id").value = item.id;
+          document.getElementById("inv-name").value = item.name;
+          document.getElementById("inv-remaining").value = item.remaining;
+          document.getElementById("inv-x").value = item.x || 0;
+          document.getElementById("inv-y").value = item.y || 0;
+          document.getElementById("inv-group-id-hidden").value =
+            item.groupId || "";
+          document.getElementById("inv-type").value = item.type || "simple";
+          document.getElementById("inv-sub-unit").value = item.sub_unit || "";
+          document.getElementById("inv-details").value = item.details || "";
+          delBtn.style.display = "block";
+
+          // BACKFILL GROUP SELECTION
+          if (item.groupId) {
+            groupSelect.value = `${item.x}|${item.y}|${item.groupId}`;
+            document.getElementById("group-name-container").style.display =
+              "block";
+            document.getElementById("inv-group-name").value =
+              (groupsData[item.groupId] && groupsData[item.groupId].name) || "";
+          } else {
+            document.getElementById("group-name-container").style.display =
+              "none";
+          }
+
+          if (item.type === "detailed") {
+            renderSubItemsUI(item.remaining, item.sub_items);
+          }
+        } else {
+          document.getElementById("modal-title").innerText = "Add New Item";
+          form.reset();
+          document.getElementById("inv-id").value = "";
+          delBtn.style.display = "none";
+          document.getElementById("sub-items-container").style.display = "none";
+        }
+        modal.style.display = "flex";
+        toggleSubItemsUI();
+      }
+
+      function toggleSubItemsUI() {
+        const type = document.getElementById("inv-type").value;
+        const container = document.getElementById("sub-items-container");
+        const qLabel = document.getElementById("quantity-label");
+
+        container.style.display = type === "detailed" ? "block" : "none";
+        qLabel.innerText =
+          type === "detailed" ? "Item Count (个)" : "Quantity (个)";
+
+        if (type === "detailed") {
+          const count =
+            parseInt(document.getElementById("inv-remaining").value) || 0;
+          // Try to grab current UI values to preserve them
+          const currentData = [];
+          const rs = document.querySelectorAll(".sub-r");
+          const ts = document.querySelectorAll(".sub-t");
+          rs.forEach((r, i) => {
+            currentData.push({
+              r: parseFloat(r.value),
+              t: parseFloat(ts[i].value),
+            });
+          });
+          renderSubItemsUI(count, currentData);
+        }
+      }
+
+      function renderSubItemsUI(count, data = []) {
+        const list = document.getElementById("sub-items-list");
+        list.innerHTML = "";
+        for (let i = 0; i < count; i++) {
+          const sub = data[i] || { r: 100, t: 100 };
+          const row = document.createElement("div");
+          row.style.display = "grid";
+          row.style.gridTemplateColumns = "40px 1fr 1fr";
+          row.style.gap = "15px";
+          row.style.marginBottom = "12px";
+          row.style.alignItems = "center";
+          row.innerHTML = `
+                    <span style="font-size: 12px; color: var(--accent-color); font-weight: bold;">#${i + 1}</span>
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-size:9px; color:rgba(255,255,255,0.4)">REMAINING</span>
+                        <input type="number" class="sub-r" value="${sub.r}" step="0.1" style="margin-top:0">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-size:9px; color:rgba(255,255,255,0.4)">CAPACITY</span>
+                        <input type="number" class="sub-t" value="${sub.t}" step="0.1" style="margin-top:0">
+                    </div>
+                `;
+          list.appendChild(row);
+        }
+      }
+
+      // Add listener to update sub-items when count changes
+      document.getElementById("inv-remaining").addEventListener("input", () => {
+        if (document.getElementById("inv-type").value === "detailed") {
+          toggleSubItemsUI();
+        }
+      });
+
+      function closeInventoryModal() {
+        document.getElementById("inventory-modal").style.display = "none";
+      }
+
+      function editCurrentItem() {
+        closeDetailModal();
+        openInventoryModal(selectedItem.id);
+      }
+
+      async function deleteItem() {
+        const id = document.getElementById("inv-id").value;
+        if (confirm("Delete this item?")) {
+          await fetch(`/api/inventory/${id}`, { method: "DELETE" });
+          closeInventoryModal();
+          fetchInventory();
+        }
+      }
+
+      document.getElementById("inventory-form").onsubmit = async (e) => {
+        e.preventDefault();
+        const id = document.getElementById("inv-id").value;
+        const subItems = [];
+        if (document.getElementById("inv-type").value === "detailed") {
+          const rs = document.querySelectorAll(".sub-r");
+          const ts = document.querySelectorAll(".sub-t");
+          rs.forEach((r, i) => {
+            subItems.push({
+              r: parseFloat(r.value || 0),
+              t: parseFloat(ts[i].value || 0),
+            });
+          });
+        }
+
+        const quantity = parseFloat(
+          document.getElementById("inv-remaining").value,
+        );
+        const gid =
+          document.getElementById("inv-group-id-hidden").value || null;
+        const gName = document.getElementById("inv-group-name").value;
+
+        const data = {
+          name: document.getElementById("inv-name").value,
+          remaining: quantity,
+          x: Number(
+            parseFloat(document.getElementById("inv-x").value || 0).toFixed(2),
+          ),
+          y: Number(
+            parseFloat(document.getElementById("inv-y").value || 0).toFixed(2),
+          ),
+          groupId: gid,
+          type: document.getElementById("inv-type").value,
+          sub_unit: document.getElementById("inv-sub-unit").value,
+          sub_items: subItems,
+          details: document.getElementById("inv-details").value,
+        };
+
+        // Save Group Name if applicable
+        if (gid && gName) {
+          await fetch(`/api/groups/${gid}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: gName }),
+          });
+        }
+
+        const method = id ? "PUT" : "POST";
+        const url = id ? `/api/inventory/${id}` : "/api/inventory";
+
+        await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        closeInventoryModal();
+        await fetchGroups();
+        fetchInventory();
+      };
+
+      async function init() {
+        await fetchConfig();
+        await fetchGroups();
+        await fetchInventory();
+        resize();
+        animate();
+        connect();
+      }
+
+      init();
+    </script>
+  </body>
+</html>

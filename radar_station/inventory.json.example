@@ -1,0 +1,15 @@
+{
+    "LIVING_ROOM": {
+        "items": [
+            {"id": "item_001", "name": "遥控器", "pos": [2.5, 3.5]},
+            {"id": "item_002", "name": "水杯", "pos": [2.6, 3.4]}
+        ],
+        "groups": []
+    },
+    "WORK_AREA": {
+        "items": [
+            {"id": "item_003", "name": "笔记本电脑", "pos": [0.5, 4.0]}
+        ],
+        "groups": []
+    }
+}

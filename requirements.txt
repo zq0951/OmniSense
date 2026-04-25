@@ -1,0 +1,19 @@
+flask
+flask-cors
+paho-mqtt
+pyaudio
+requests
+python-dotenv
+openwakeword
+# MOSS-TTS-Nano dependencies (Pinned to moss_test environment)
+numpy==2.2.6
+torch==2.7.0
+transformers==4.57.1
+sentencepiece
+torchaudio==2.7.0
+soundfile
+python-multipart
+uvicorn
+fastapi
+sentence-transformers
+httpx
