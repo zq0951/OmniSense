@@ -340,35 +340,37 @@ async def get_inventory():
 
 @app.post("/api/inventory")
 async def add_inventory_item(item: dict):
-    data = load_data()
-    if "id" not in item:
-        item["id"] = f"inv_{int(time.time() * 1000)}"
-    data["items"].append(item)
-    save_data(data)
+    async with _inventory_lock:
+        data = load_data()
+        if "id" not in item:
+            item["id"] = f"inv_{int(time.time() * 1000)}"
+        data["items"].append(item)
+        save_data(data)
     return item
 
 @app.put("/api/inventory/{item_id}")
 async def update_inventory_item(item_id: str, updated_item: dict):
-    data = load_data()
-    items = data.get("items", [])
-    target_item = None
-    for i, item in enumerate(items):
-        if item.get("id") == item_id:
-            items[i].update(updated_item)
-            target_item = items[i]
-            break
-    
-    if target_item:
-        # SYNC LOGIC: If item belongs to a group, update all other members
-        gid = target_item.get("groupId")
-        if gid:
-            for item in items:
-                if item.get("groupId") == gid and item.get("id") != item_id:
-                    item["x"] = target_item["x"]
-                    item["y"] = target_item["y"]
+    async with _inventory_lock:
+        data = load_data()
+        items = data.get("items", [])
+        target_item = None
+        for i, item in enumerate(items):
+            if item.get("id") == item_id:
+                items[i].update(updated_item)
+                target_item = items[i]
+                break
         
-        save_data(data)
-        return target_item
+        if target_item:
+            # SYNC LOGIC: If item belongs to a group, update all other members
+            gid = target_item.get("groupId")
+            if gid:
+                for item in items:
+                    if item.get("groupId") == gid and item.get("id") != item_id:
+                        item["x"] = target_item["x"]
+                        item["y"] = target_item["y"]
+            
+            save_data(data)
+            return target_item
     return {"error": "Item not found"}
 
 @app.get("/api/groups")
@@ -386,9 +388,10 @@ async def update_group(group_id: str, group_data: dict):
 
 @app.delete("/api/inventory/{item_id}")
 async def delete_inventory_item(item_id: str):
-    data = load_data()
-    data["items"] = [item for item in data.get("items", []) if item.get("id") != item_id]
-    save_data(data)
+    async with _inventory_lock:
+        data = load_data()
+        data["items"] = [item for item in data.get("items", []) if item.get("id") != item_id]
+        save_data(data)
     return {"status": "deleted"}
 
 if __name__ == "__main__":

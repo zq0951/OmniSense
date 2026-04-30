@@ -17,7 +17,7 @@ class SemanticMatcher:
             
         from sentence_transformers import SentenceTransformer
         logger.info(f"🧬 正在加载语义模型: {model_name} ...")
-        self.model = SentenceTransformer(model_name)
+        self.model = SentenceTransformer(model_name, device='cpu')
         self.threshold = threshold
         self.intents = {} # {intent_id: prototype_vector}
 

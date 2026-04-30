@@ -31,10 +31,8 @@ try:
     from moss_tts_nano_runtime import NanoTTSService
     torch.set_num_threads(int(os.getenv("OMP_NUM_THREADS", "4")))
     try:
-        MOSS_SERVICE = NanoTTSService(device="cpu") # 强制 CPU 保证稳定性
-        # 🛠️ 内存级“零改动”补丁：
-        # 将 checkpoint_path 指向本地快照目录。配合 main.py 中的猴子补丁，
-        # 它可以同时满足模型加载和分词器加载的需求。
+        # 🛠️ V5 强制补丁：指定 dtype 和 attn_implementation 以避开 meta 设备加载路径
+        MOSS_SERVICE = NanoTTSService(device="cpu", dtype="float32", attn_implementation="sdpa") 
         MOSS_SERVICE.checkpoint_path = MOSS_CHECKPOINT_PATH
         logger.info(f"✅ MOSS TTS 服务初始化成功 (路径: {MOSS_CHECKPOINT_PATH})")
     except Exception as e:
@@ -65,7 +63,7 @@ def synthesis_worker(text_queue, audio_queue):
         if sentence is None:
             audio_queue.put(None)
             text_queue.task_done()
-            break
+            continue
 
         clean_text = filter_symbols(sentence)
         if not clean_text:
@@ -82,8 +80,6 @@ def synthesis_worker(text_queue, audio_queue):
         logger.info(f"🎙️ [MOSS 合成]: {clean_text}")
         if MOSS_SERVICE:
             try:
-                # 🛠️ 零改动修复：通过补丁方式修正分词器路径，确保在离线模式下正确加载 .model 文件
-                # 注意：这只在内存中生效，不会修改 MOSS-TTS-Nano 的源码
                 result = MOSS_SERVICE.synthesize(text=clean_text)
                 waveform = result["waveform"]
                 sr = result["sample_rate"]
@@ -113,7 +109,6 @@ def playback_worker(audio_queue):
     try:
         while True:
             if TASK_CTRL.is_stopped():
-                # 如果被中止，释放锁并重置状态，但不要退出线程
                 set_is_playing(False)
                 if lock_acquired:
                     SPEAKER_LOCK.release()
@@ -131,13 +126,11 @@ def playback_worker(audio_queue):
                 set_is_playing(False)
                 continue
             
-            # 开始播放，设置状态
             set_is_playing(True)
 
             if not lock_acquired:
                 SPEAKER_LOCK.acquire()
                 lock_acquired = True
-                # 再次检查，防止在等待锁的过程中被中止
                 if TASK_CTRL.is_stopped():
                     set_is_playing(False)
                     audio_queue.task_done()
@@ -152,8 +145,12 @@ def playback_worker(audio_queue):
                     except:
                         aplay_proc.kill()
                     aplay_proc = None
+                TASK_CTRL.set_aplay(None)
+                if lock_acquired:
+                    SPEAKER_LOCK.release()
+                    lock_acquired = False
                 audio_queue.task_done()
-                break
+                continue
             
             if aplay_proc is None:
                 try:
@@ -177,12 +174,10 @@ def playback_worker(audio_queue):
                 aplay_proc.stdin.write(chunk)
                 aplay_proc.stdin.flush()
             except (BrokenPipeError, ConnectionResetError):
-                # 物理打断导致的管道破裂，静默处理并重置引用
                 aplay_proc = None
                 TASK_CTRL.set_aplay(None)
             except Exception as e:
                 logger.error(f"Playback Write Error: {e}")
-                # 发生意外错误，清理进程引用以便下次重建
                 try: aplay_proc.kill()
                 except: pass
                 aplay_proc = None
@@ -197,4 +192,3 @@ def playback_worker(audio_queue):
             try: aplay_proc.kill()
             except: pass
         TASK_CTRL.set_aplay(None)
-

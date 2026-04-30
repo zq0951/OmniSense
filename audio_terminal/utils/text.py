@@ -76,38 +76,3 @@ def filter_symbols(text):
         text = text[:-1] + weak_to_strong[text[-1]]
         
     return text
-
-def split_text(text, zh_voice="zm_yunxi", en_voice="am_adam"):
-    """根据语种切分中英文字段，数字跟随上下文语种"""
-    pattern = r'([a-zA-Z][a-zA-Z\s.,!?\'";\-:]+)'
-    segments = []
-    last_end = 0
-    for match in re.finditer(pattern, text):
-        start, end = match.start(), match.end()
-        if start > last_end:
-            zh_part = text[last_end:start].strip()
-            if zh_part:
-                segments.append({"text": zh_part, "voice": zh_voice})
-        en_part = match.group().strip()
-        if en_part:
-            segments.append({"text": en_part, "voice": en_voice})
-        last_end = end
-    if last_end < len(text):
-        zh_part = text[last_end:].strip()
-        if zh_part:
-            segments.append({"text": zh_part, "voice": zh_voice})
-    
-    if not segments:
-        segments.append({"text": text.strip(), "voice": zh_voice})
-
-    # 碎片吸附逻辑
-    processed = []
-    for s in segments:
-        if not processed:
-            processed.append(s)
-        else:
-            if len(s["text"]) <= 1 and not re.search(r'[\u4e00-\u9fa5a-zA-Z0-9]', s["text"]):
-                processed[-1]["text"] += s["text"]
-            else:
-                processed.append(s)
-    return processed

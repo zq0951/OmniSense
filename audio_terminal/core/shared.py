@@ -37,3 +37,16 @@ def set_is_playing(value):
 
 # 会话初始化标记：用于记录哪些 Session 已发送过 voice_system_hint
 INITIALIZED_SESSIONS = set()
+
+# 用户情绪状态
+_emotion_lock = threading.Lock()
+USER_EMOTION = "NEUTRAL"
+
+def get_user_emotion():
+    with _emotion_lock:
+        return USER_EMOTION
+
+def set_user_emotion(value):
+    global USER_EMOTION
+    with _emotion_lock:
+        USER_EMOTION = value

@@ -24,8 +24,10 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# 更换 pip 源加速依赖安装
-RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+# 增加超时时间并使用更稳定的源
+RUN pip install --no-cache-dir --default-timeout=1000 \
+    -r requirements.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 COPY . .
 

@@ -6,7 +6,7 @@ import threading
 import time
 import re
 import asyncio
-from core.shared import get_silent_mode, set_silent_mode
+from core.shared import get_silent_mode, set_silent_mode, get_user_emotion
 from core.actions import GLOBAL_ACTION_MGR
 from core.controller import TASK_CTRL
 from core.tts import synthesis_worker, playback_worker
@@ -55,6 +55,17 @@ async def stream_and_speak(user_text):
     from core.shared import INITIALIZED_SESSIONS
     
     current_session = GLOBAL_ACTION_MGR.session_key
+    user_emotion = get_user_emotion()
+    if user_emotion and user_emotion != "NEUTRAL":
+        # 针对特定情绪添加感知提示
+        emotion_hints = {
+            "ANGRY": "（检测到用户语气愤怒，请用安抚、理智且温和的语气回复，不要火上浇油。）",
+            "HAPPY": "（检测到用户心情愉悦，可以适当表现得轻松、热情一些。）",
+            "SAD": "（检测到用户情绪低落，请表现出同情心和关怀，使用治愈系的语气。）"
+        }
+        hint = emotion_hints.get(user_emotion, f"（用户当前情绪：{user_emotion}）")
+        user_text = hint + "\n" + user_text
+
     # 只有当 Session 未被初始化过时，才附加系统提示词
     if current_session not in INITIALIZED_SESSIONS:
         user_text += "\n\n" + voice_system_hint
@@ -123,22 +134,30 @@ async def stream_and_speak(user_text):
                         
                         if not is_thinking:
                             current_sentence += chunk
-                            # 分句逻辑：寻找结束标点
-                            if any(d in current_sentence for d in [".", "!", "?", "。", "！", "？", "\n"]):
-                                if len(current_sentence) >= MIN_SENTENCE_LEN:
-                                    # 寻找最后一个标点进行切分
-                                    split_idx = -1
-                                    for i in range(len(current_sentence)-1, -1, -1):
-                                        if current_sentence[i] in [".", "!", "?", "。", "！", "？", "\n"]:
-                                            split_idx = i + 1
-                                            break
-                                    
-                                    if split_idx != -1:
-                                        sentence_to_send = current_sentence[:split_idx].strip()
-                                        current_sentence = current_sentence[split_idx:]
-                                        
-                                        if sentence_to_send and not get_silent_mode():
-                                            GLOBAL_TEXT_QUEUE.put(sentence_to_send)
+                            # 分句逻辑：使用 config 中定义的正则分句器
+                            last_match = None
+                            for m in SENTENCE_DELIMITERS.finditer(current_sentence):
+                                last_match = m
+                            
+                            if last_match and len(current_sentence) >= MIN_SENTENCE_LEN:
+                                split_idx = last_match.end()
+                                sentence_to_send = current_sentence[:split_idx].strip()
+                                current_sentence = current_sentence[split_idx:]
+                                if sentence_to_send and not get_silent_mode():
+                                    GLOBAL_TEXT_QUEUE.put(sentence_to_send)
+                            elif len(current_sentence) >= MAX_SENTENCE_LEN:
+                                # 超长句强制分割：优先在逗号处切分
+                                sec_match = None
+                                for m in SECONDARY_DELIMITERS.finditer(current_sentence):
+                                    sec_match = m
+                                if sec_match:
+                                    split_idx = sec_match.end()
+                                else:
+                                    split_idx = MAX_SENTENCE_LEN
+                                sentence_to_send = current_sentence[:split_idx].strip()
+                                current_sentence = current_sentence[split_idx:]
+                                if sentence_to_send and not get_silent_mode():
+                                    GLOBAL_TEXT_QUEUE.put(sentence_to_send)
                                         
                     except json.JSONDecodeError:
                         continue

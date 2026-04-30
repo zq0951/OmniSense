@@ -6,8 +6,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
 # Endpoints
-KOKORO_TTS_URL = os.getenv("KOKORO_TTS_URL", "http://localhost:8000/v1/audio/speech")
-WHISPER_STT_URL = os.getenv("WHISPER_STT_URL", "http://localhost:8081/v1/audio/transcriptions")
+FUNASR_STT_URL = os.getenv("FUNASR_STT_URL", "wss://localhost:10095")
 AGENT_URL = os.getenv("AGENT_API_URL", "http://localhost:8642")
 AGENT_TOKEN = os.getenv("API_SERVER_KEY", "your_token_here")
 

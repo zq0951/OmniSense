@@ -14,7 +14,7 @@ build/
 
 # ============ 模型权重与缓存 ============
 MOSS-TTS-Nano/
-voice-stack/whisper-models/
+voice-stack/
 audio_terminal/models/
 *.safetensors
 

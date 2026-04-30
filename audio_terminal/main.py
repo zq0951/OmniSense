@@ -5,79 +5,94 @@ import logging
 import threading
 import time
 import uvicorn
+import asyncio
+
+# ==============================================================================
+# 🧩 CPU 离线环境深度优化 (CPU-Only & Offline Enforcement)
+# ==============================================================================
+# 1. 物理屏蔽 GPU：强制让所有库认为系统没有显卡，避免任何显存分配尝试
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# 2. 强制离线模式
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("OmniSenseAudio")
 
-# ==============================================================================
-# 🧩 离线环境增强补丁 (Offline Environment Enhancements)
-# ==============================================================================
 def apply_offline_patches():
-    """应用针对离线环境和 MOSS-TTS-Nano 的猴子补丁"""
+    """针对 CPU 离线环境的精准补丁 (V5.3 纯净版)"""
     from config import MOSS_PATH
     
-    # 注入 MOSS 搜索路径
     if MOSS_PATH not in sys.path:
         sys.path.append(MOSS_PATH)
 
     try:
-        import transformers.modeling_utils
-        import transformers.utils.import_utils
-        
-        # 🧩 补丁 1: 修复 transformers 在完全离线模式下处理 safetensors 元数据缺失导致的 NoneType 崩溃
-        if not hasattr(transformers.modeling_utils, "_is_patched_for_offline"):
-            _orig_load_state_dict = transformers.modeling_utils.load_state_dict
-            def _patched_load_state_dict(checkpoint_file, map_location=None, **kwargs):
-                if checkpoint_file.endswith(".safetensors") and transformers.utils.import_utils.is_safetensors_available():
-                    from safetensors.torch import load_file as safe_load_file
-                    return safe_load_file(checkpoint_file, device=map_location if map_location else "cpu")
-                return _orig_load_state_dict(checkpoint_file, map_location=map_location, **kwargs)
-            
-            transformers.modeling_utils.load_state_dict = _patched_load_state_dict
-            transformers.modeling_utils._is_patched_for_offline = True
-            logger.info("🛠️ [Patch] Transformers Safetensors 容错补丁已应用")
+        import transformers
+        # 🧩 劫持 transformers 工厂类：
+        # 在 CPU 环境下，加载 MOSS 必须强制关闭 low_cpu_mem_usage，否则会触发 torch-cpu 不支持的 meta 设备路径
+        # 🧩 劫持 transformers 工厂类 (V5.4 终极强化版)：
+        # 该项目必须运行在 CPU 上。我们强制关闭一切可能导致进入 meta 设备的内存优化逻辑。
+        for auto_cls in [transformers.AutoModel, transformers.AutoModelForCausalLM]:
+            if not hasattr(auto_cls, "_is_patched"):
+                _orig_fp = auto_cls.from_pretrained
+                @classmethod
+                def _patched_fp(cls, *args, **kwargs):
+                    # 强力重置：无论加载什么模型，在 CPU 上都必须禁用 low_cpu_mem_usage
+                    # 因为 torch-cpu 环境下 meta tensor 的 copy 操作是不支持的
+                    kwargs["low_cpu_mem_usage"] = False
+                    kwargs["device_map"] = None
+                    if "device" in kwargs: del kwargs["device"]
+                    
+                    # 打印一条日志方便确认补丁生效
+                    model_id = args[0] if len(args) > 0 else kwargs.get("pretrained_model_name_or_path", "unknown")
+                    logging.getLogger("OmniSenseAudio").info(f"🛠️ [CPU-Patch] Loading model {model_id} with low_cpu_mem_usage=False")
+                    
+                    return _orig_fp.__func__(cls, *args, **kwargs)
+                auto_cls.from_pretrained = _patched_fp
+                auto_cls._is_patched = True
 
-        # 🧩 补丁 2: 注入虚拟模块以绕过 transformers 的动态导入静态检查
+        # 🧩 注入 MOSS 虚拟模块支持
         import types
-        fake_modules = [
-            "configuration_moss_audio_tokenizer", "configuration_moss_tts_nano", 
-            "modeling_moss_audio_tokenizer", "modeling_moss_tts_nano"
-        ]
-        for mod_name in fake_modules:
-            if mod_name not in sys.modules:
-                sys.modules[mod_name] = types.ModuleType(mod_name)
+        for m in ["configuration_moss_audio_tokenizer", "configuration_moss_tts_nano", "modeling_moss_audio_tokenizer", "modeling_moss_tts_nano"]:
+            if m not in sys.modules: sys.modules[m] = types.ModuleType(m)
 
-        # 🧩 补丁 3: MOSS 路径死锁拦截 (解决 AutoModel 目录加载 vs Tokenizer 文件加载冲突)
+        # 🧩 拦截 C: MOSS 路径适配
         try:
             import moss_tts_nano_runtime
             if not hasattr(moss_tts_nano_runtime.NanoTTSService, "_is_patched"):
-                _orig_load_locked = moss_tts_nano_runtime.NanoTTSService._load_model_locked
-                
-                def _patched_load_model_locked(self):
-                    old_path = self.checkpoint_path
-                    is_file = old_path and str(old_path).endswith(".model")
-                    if is_file:
-                        self.checkpoint_path = os.path.dirname(str(old_path))
-                        logger.info(f"🛠️ [Patch] 正在为 AutoModel 切换路径: {self.checkpoint_path}")
-                    try:
-                        return _orig_load_locked(self)
-                    finally:
-                        if is_file:
-                            self.checkpoint_path = old_path
-                
-                moss_tts_nano_runtime.NanoTTSService._load_model_locked = _patched_load_model_locked
+                _orig_load = moss_tts_nano_runtime.NanoTTSService._load_model_locked
+                def _p_load(self):
+                    if self.checkpoint_path and str(self.checkpoint_path).endswith(".model"):
+                        self.checkpoint_path = os.path.dirname(str(self.checkpoint_path))
+                    return _orig_load(self)
+                moss_tts_nano_runtime.NanoTTSService._load_model_locked = _p_load
                 moss_tts_nano_runtime.NanoTTSService._is_patched = True
-                logger.info("🛠️ [Patch] MOSS 路径死锁补丁已就绪")
-        except Exception as e:
-            logger.warning(f"无法应用 MOSS 运行时补丁: {e}")
+        except: pass
 
-        # 强制开启离线模式
+        # 🧩 拦截 D: 屏蔽加速库与设备重定向
+        try:
+            import torch
+            # 1. 禁用 accelerate 探测：这是防止 transformers 自动进入 meta 加载逻辑的最优雅方式
+            import transformers.utils.import_utils as import_utils
+            import_utils.is_accelerate_available = lambda: False
+            
+            # 2. 劫持 torch.load (保持原有 CPU 重定向)
+            _orig_torch_load = torch.load
+            def _patched_torch_load(*args, **kwargs):
+                ml = kwargs.get("map_location")
+                if ml == "meta" or getattr(ml, "type", "") == "meta": kwargs["map_location"] = "cpu"
+                return _orig_torch_load(*args, **kwargs)
+            torch.load = _patched_torch_load
+            
+        except Exception as e:
+            print(f"底层屏蔽失败: {e}")
+
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
         os.environ["HF_HUB_OFFLINE"] = "1"
-        
-    except ImportError:
-        logger.warning("未检测到 transformers，跳过环境补丁")
+        print("🛠️ [Patch] V5.2 补丁已激活 (已恢复语义匹配兼容性)")
+    except Exception as e:
+        print(f"补丁应用失败: {e}")
 
 # 在模块加载时立即应用补丁
 apply_offline_patches()
@@ -133,11 +148,13 @@ def persistent_worker(target, *args):
             logger.error(f"线程 {name} 异常，5s 后自动重启: {e}")
             time.sleep(5)
 
-import asyncio
-
 def main():
     logger.info("--- OmniSense Audio Terminal Started (Modular Refactored) ---")
     cleanup_old_audio(days=3)
+    
+    # 创建持久事件循环，避免反复创建/销毁导致资源泄漏
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
     # 启动 API 服务
     threading.Thread(target=run_api_server, daemon=True).start()
@@ -149,41 +166,30 @@ def main():
     logger.info("🎧 系统就绪，随时等待你开口说话...")
     while True:
         try:
-            # 半双工逻辑：如果正在播放且非全双工模式，则暂时跳过录音识别
             if AUDIO_DUPLEX_MODE == "half" and get_is_playing():
                 time.sleep(0.1)
                 continue
-
             audio_file, trigger_rms = record_audio_until_silence()
-            if audio_file is None:
-                continue
-
-            
-            # 异步 STT
-            user_text = asyncio.run(speech_to_text(audio_file, trigger_rms))
-            
+            if audio_file is None: continue
+            user_text = loop.run_until_complete(speech_to_text(audio_file, trigger_rms))
             if user_text and user_text.strip():
-                # 指令拦截
-                if handle_immediate_actions(user_text):
-                    continue
-
-                # 如果当前是静默模式，且不是紧急指令，则不发送给 LLM
+                if handle_immediate_actions(user_text): continue
                 if get_silent_mode():
                     logger.info(f"🤫 [静默模式]: 忽略用户输入: {user_text}")
                     continue
-
-                # 新任务重置
                 TASK_CTRL.request_stop(reason="reset")
                 time.sleep(0.05) 
                 TASK_CTRL.reset()
-
-                # 异步处理对话 (在线程中运行 asyncio.run)
-                threading.Thread(target=lambda: asyncio.run(stream_and_speak(user_text)), daemon=True).start()
+                # LLM 流式请求在独立线程中运行，各自创建独立事件循环是安全的
+                # 使用默认参数捕获 user_text 值，避免闭包引用问题
+                threading.Thread(target=lambda t=user_text: asyncio.run(stream_and_speak(t)), daemon=True).start()
         except KeyboardInterrupt:
             logger.info("👋 用户中断，退出程序")
             break
         except Exception as e:
             logger.error(f"Main Loop Error: {e}")
+    
+    loop.close()
 
 if __name__ == "__main__":
     main()

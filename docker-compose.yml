@@ -2,20 +2,20 @@ services:
   # ===============================================
   # 1. 外部依赖集成 (Voice & IoT)
   # ===============================================
-  whisper-stt:
-    image: docker.1ms.run/fedirz/faster-whisper-server:latest-cpu
-    container_name: jarvis_whisper_stt
+  funasr-stt:
+    image: registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-cpu-0.4.6
+    container_name: jarvis_funasr_stt
     restart: unless-stopped
     ports:
-      - "8081:8000"
-    environment:
-      - WHISPER__MODEL=small
-      - WHISPER__INFERENCE_DEVICE=cpu
-      - WHISPER__COMPUTE_TYPE=int8
-      - WHISPER__TTL=86400
-      - OMP_NUM_THREADS=8
+      - "10095:10095"
     volumes:
-      - ./voice-stack/whisper-models:/root/.cache/huggingface
+      - ./voice-stack/funasr-models:/workspace/models
+    working_dir: /workspace/FunASR/runtime
+    command: >
+      bash -c "bash run_server.sh 
+      --model-dir /workspace/models/SenseVoiceSmall 
+      --vad-dir /workspace/models/speech_fsmn_vad_zh-cn-16k-common-onnx 
+      --port 10095 2>&1 | tee server.log"
     deploy:
       resources:
         limits:
@@ -23,6 +23,7 @@ services:
           memory: 2G
 
   audio_terminal:
+    build: .
     image: openclaw-smarthome-audio_terminal:latest
     container_name: jarvis_audio_terminal
     restart: unless-stopped
@@ -52,8 +53,6 @@ services:
       - MKL_NUM_THREADS=10
     network_mode: "host"
 
-
-
   radar_station:
     build: .
     container_name: jarvis_radar_station
@@ -64,4 +63,3 @@ services:
     env_file:
       - .env
     network_mode: "host"
-
