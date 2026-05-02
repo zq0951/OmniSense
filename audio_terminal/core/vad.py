@@ -13,9 +13,10 @@ _global_noise_floor = 0.0
 _global_calibrated_threshold = 0.0
 
 def record_audio_until_silence(output_filename="temp_audio.wav"):
-    from config import ENERGY_THRESHOLD, MIN_ENERGY_THRESHOLD, VAD_MULTIPLIER, SAMPLE_RATE, CHANNELS, SAMPLE_WIDTH, CHUNK_SIZE, SILENCE_TIMEOUT, MAX_RECORD_SECONDS, PRE_SPEECH_BUFFER, CHUNK_DURATION_MS
+    from config import ENERGY_THRESHOLD, MIN_ENERGY_THRESHOLD, VAD_MULTIPLIER, SAMPLE_RATE, CHANNELS, SAMPLE_WIDTH, CHUNK_SIZE, SILENCE_TIMEOUT, MAX_RECORD_SECONDS, PRE_SPEECH_BUFFER, CHUNK_DURATION_MS, AUDIO_DUPLEX_MODE
+    from core.shared import get_is_playing
     
-    logger.info("🎧 等待人声输入... (环境音自动校准中)")
+    logger.info(f"🎧 等待人声输入... (模式: {AUDIO_DUPLEX_MODE}, 环境音自动校准中)")
     proc = subprocess.Popen(
         ["arecord", "-q", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", str(CHANNELS), "-t", "raw"],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
@@ -43,6 +44,13 @@ def record_audio_until_silence(output_filename="temp_audio.wav"):
                 break
             rms = calc_rms(data, SAMPLE_WIDTH)
             
+            # --- 动态阈值抑制 (Ducking) ---
+            # 如果 AI 正在说话，我们临时大幅提高灵敏度要求，防止自触发回声
+            # 只有当用户说话声音远大于 AI 回声时才触发打断
+            current_multiplier = VAD_MULTIPLIER
+            if get_is_playing():
+                current_multiplier = VAD_MULTIPLIER * 2.5 # 提高 2.5 倍门槛
+
             if not is_speaking:
                 # 背景噪音平滑估计
                 if noise_floor == 0:
@@ -51,13 +59,17 @@ def record_audio_until_silence(output_filename="temp_audio.wav"):
                     noise_floor = (1 - alpha) * noise_floor + alpha * rms
                 
                 # 动态计算触发阈值
-                calibrated_threshold = max(MIN_ENERGY_THRESHOLD, noise_floor * VAD_MULTIPLIER)
+                calibrated_threshold = max(MIN_ENERGY_THRESHOLD, noise_floor * current_multiplier)
                 
                 pre_buffer.append(data)
                 if len(pre_buffer) > PRE_SPEECH_BUFFER:
                     pre_buffer.pop(0)
                 
                 if rms > calibrated_threshold and rms > MIN_ENERGY_THRESHOLD:
+                    # 如果是半双工模式且正在播放，即便过了阈值也强行拦截（main.py 已有拦截，这里作为双重保险）
+                    if AUDIO_DUPLEX_MODE == "half" and get_is_playing():
+                        continue
+
                     is_speaking = True
                     trigger_rms = rms
                     record_start = time.time()

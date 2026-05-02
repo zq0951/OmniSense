@@ -117,15 +117,23 @@ def playback_worker(audio_queue):
                     try: aplay_proc.kill()
                     except: pass
                     aplay_proc = None
+                # 清空音频队列，防止停止后仍有残留
+                try:
+                    while not audio_queue.empty(): audio_queue.get_nowait()
+                except: pass
                 time.sleep(0.1)
                 continue
 
             try:
-                chunk = audio_queue.get(timeout=0.2)
+                # 增加等待时间，防止 CPU 空转，同时降低抖动
+                chunk = audio_queue.get(timeout=0.1)
             except queue.Empty:
-                set_is_playing(False)
+                if aplay_proc and not TASK_CTRL.is_stopped():
+                    # 队列暂时空了，但可能还有下一句，不立即关闭 aplay 但更新状态
+                    set_is_playing(False)
                 continue
             
+            # 只要拿到数据块，就标记为正在播放
             set_is_playing(True)
 
             if not lock_acquired:
@@ -137,14 +145,16 @@ def playback_worker(audio_queue):
                     continue
 
             if chunk is None:
-                set_is_playing(False)
+                # 收到结束标志
                 if aplay_proc:
                     try:
                         aplay_proc.stdin.close()
-                        aplay_proc.wait(timeout=2)
+                        aplay_proc.wait(timeout=1)
                     except:
                         aplay_proc.kill()
                     aplay_proc = None
+                
+                set_is_playing(False)
                 TASK_CTRL.set_aplay(None)
                 if lock_acquired:
                     SPEAKER_LOCK.release()
