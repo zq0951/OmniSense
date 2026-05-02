@@ -113,15 +113,7 @@ class ActionManager:
                     self.buffer = self.buffer.replace(tag, "")
                     break
         
-        # 2. 只有在明确要求或可能是完整意图时才进行语义匹配
-        if not triggered and use_semantic and self.semantic_matcher and self.is_ready:
-            if len(self.buffer) > 2:
-                action_id = self.semantic_matcher.match(self.buffer)
-                if action_id:
-                    triggered.append(action_id)
-                    self.buffer = ""
-        
-        # 3. 关键词后备匹配
+        # 2. 关键词匹配 (精确指令优先级高于模糊语义)
         if not triggered:
             for action_id, config in self.ACTIONS.items():
                 for kw in config["keywords"]:
@@ -130,6 +122,14 @@ class ActionManager:
                         # 匹配后清理 buffer 防止重复触发
                         self.buffer = "" 
                         break
+
+        # 3. 只有在明确要求或可能是完整意图时才进行语义匹配
+        if not triggered and use_semantic and self.semantic_matcher and self.is_ready:
+            if len(self.buffer) > 2:
+                action_id = self.semantic_matcher.match(self.buffer)
+                if action_id:
+                    triggered.append(action_id)
+                    self.buffer = ""
         return triggered
 
     def execute_action(self, action_id, context=None):

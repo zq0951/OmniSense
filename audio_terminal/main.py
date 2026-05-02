@@ -110,7 +110,8 @@ from core.controller import TASK_CTRL
 from core.vad import record_audio_until_silence
 from core.stt import speech_to_text
 from core.tts import synthesis_worker, playback_worker
-from core.orchestrator import stream_and_speak, handle_immediate_actions
+from core.orchestrator import stream_and_speak
+from core.actions import GLOBAL_ACTION_MGR
 from api.routes import app
 import queue
 
@@ -190,10 +191,13 @@ def main():
             if audio_file is None: continue
             user_text = loop.run_until_complete(speech_to_text(audio_file, trigger_rms))
             if user_text and user_text.strip():
-                if handle_immediate_actions(user_text): continue
-                if get_silent_mode():
+                actions = GLOBAL_ACTION_MGR.process_chunk(user_text, use_semantic=True)
+                
+                if get_silent_mode() and not actions:
                     logger.info(f"🤫 [静默模式]: 忽略用户输入: {user_text}")
                     continue
+
+                # 在处理任何新输入（包括指令）之前，先打断当前的语音和生成任务
                 TASK_CTRL.request_stop(reason="reset")
                 time.sleep(0.05) 
                 TASK_CTRL.reset()
@@ -204,6 +208,11 @@ def main():
                         LLM_QUEUE.get_nowait()
                     except queue.Empty:
                         break
+
+                if actions:
+                    for aid in actions:
+                        GLOBAL_ACTION_MGR.execute_action(aid)
+                    continue
                 
                 # 将新任务推入队列，由固定 Worker 处理
                 LLM_QUEUE.put(user_text)

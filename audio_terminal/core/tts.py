@@ -70,7 +70,9 @@ def synthesis_worker(text_queue, audio_queue):
             text_queue.task_done()
             continue
 
-        ts = time.strftime("%H%M%S")
+        import datetime
+        now = datetime.datetime.now()
+        ts = now.strftime("%Y%m%d_%H%M%S_%f")[:19]
         debug_wav_path = os.path.join(LOG_TTS_DIR, f"{ts}_tts.wav")
         debug_txt_path = os.path.join(LOG_TTS_DIR, f"{ts}_tts.txt")
         try:
