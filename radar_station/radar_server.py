@@ -164,18 +164,30 @@ def trigger_agent_proactive(zone_id, duration_sec):
     ctx_prompt = f"[系统感知] 现在是 {curr_time}，室内温度 {last_temp}℃。用户已经在 {desc} 持续居留超过 {int(duration_sec/60)} 分钟了。请主动发出一句简短贴心的问候或建议。"
     
     try:
-        # 委托给语音终端处理
+        # 委托给语音终端处理，增加重试补偿机制
         proactive_url = f"{AUDIO_TERMINAL_URL}/v1/audio/proactive"
-        resp = requests.post(proactive_url, json={"input": ctx_prompt}, timeout=5)
-        if resp.status_code == 200:
-            print(f"🚀 [主动感知] 已通知语音终端处理区域事件: {zone_id}")
-            last_trigger_time[zone_id] = now
-            return True
-        else:
-            print(f"❌ 语音终端拒绝请求: {resp.status_code}")
-            return False
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(proactive_url, json={"input": ctx_prompt}, timeout=5)
+                if resp.status_code == 200:
+                    print(f"🚀 [主动感知] 已通知语音终端处理区域事件: {zone_id}")
+                    last_trigger_time[zone_id] = now
+                    return True
+                else:
+                    print(f"⚠️ 语音终端拒绝请求: {resp.status_code}，重试 {attempt + 1}/{max_retries}")
+            except Exception as e:
+                print(f"⚠️ 与语音终端通讯异常: {e}，重试 {attempt + 1}/{max_retries}")
+                
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt) # 指数避退
+                
+        print(f"❌ 多次重试失败，放弃本次事件: {zone_id}")
+        return False
+        
     except Exception as e:
-        print(f"❌ 与语音终端通讯异常: {e}")
+        print(f"❌ 发起请求严重错误: {e}")
         return False
 
 def safe_float(val, default=0.0):
@@ -218,7 +230,7 @@ def update_ha_states():
                         mx, my = (-1.0 if RADAR_MIRROR_X else 1.0), (-1.0 if RADAR_MIRROR_Y else 1.0)
                         final_x, final_y = (rx * RADAR_SCALE * mx) + RADAR_X, (ry * RADAR_SCALE * my) + RADAR_Y
 
-                        point = {"id": t, "x": final_x, "y": final_y, "v": float(v)/100.0}
+                        point = {"id": t, "x": final_x, "y": final_y, "v": safe_float(v)/100.0}
                         data.append(point)
                         
                         if idx == 0:

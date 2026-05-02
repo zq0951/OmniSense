@@ -8,6 +8,10 @@ from utils.audio import calc_rms
 
 logger = logging.getLogger("OmniSenseAudio")
 
+# 跨次录音持久化的动态底噪状态
+_global_noise_floor = 0.0
+_global_calibrated_threshold = 0.0
+
 def record_audio_until_silence(output_filename="temp_audio.wav"):
     from config import ENERGY_THRESHOLD, MIN_ENERGY_THRESHOLD, VAD_MULTIPLIER, SAMPLE_RATE, CHANNELS, SAMPLE_WIDTH, CHUNK_SIZE, SILENCE_TIMEOUT, MAX_RECORD_SECONDS, PRE_SPEECH_BUFFER, CHUNK_DURATION_MS
     
@@ -25,10 +29,12 @@ def record_audio_until_silence(output_filename="temp_audio.wav"):
     record_start = None
     bytes_per_chunk = CHUNK_SIZE * SAMPLE_WIDTH
     
-    # 动态阈值状态
-    noise_floor = 0.0
-    alpha = 0.1 # 平滑系数
-    calibrated_threshold = ENERGY_THRESHOLD
+    global _global_noise_floor, _global_calibrated_threshold
+    
+    # 动态阈值状态 (复用全局状态)
+    noise_floor = _global_noise_floor
+    alpha = 0.05 # 更平滑的系数
+    calibrated_threshold = _global_calibrated_threshold if _global_calibrated_threshold > 0 else ENERGY_THRESHOLD
 
     try:
         while True:
@@ -75,6 +81,8 @@ def record_audio_until_silence(output_filename="temp_audio.wav"):
                     logger.info(f"⏰ 达到最大录音时长 {MAX_RECORD_SECONDS}s，强制结束")
                     break
     finally:
+        _global_noise_floor = noise_floor
+        _global_calibrated_threshold = calibrated_threshold
         proc.terminate()
         proc.wait()
 

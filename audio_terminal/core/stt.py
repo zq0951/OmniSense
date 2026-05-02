@@ -57,11 +57,16 @@ async def funasr_stt(audio_file):
             # Receive result
             raw_text = ""
             try:
-                # FunASR offline mode only sends ONE message back.
-                # We use a timeout to prevent infinite hanging.
+                # FunASR offline mode sends one result.
                 response = await asyncio.wait_for(websocket.recv(), timeout=15.0)
                 result = json.loads(response)
                 raw_text = result.get('text', '')
+                
+                # 优雅关闭：尝试等待服务端发出关闭帧，避免报 stream truncated，最多等 0.5s
+                try:
+                    await asyncio.wait_for(websocket.recv(), timeout=0.5)
+                except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
+                    pass
             except asyncio.TimeoutError:
                 logger.error("FunASR STT WebSocket recv timeout!")
             except Exception as e:

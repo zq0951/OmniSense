@@ -112,6 +112,22 @@ from core.stt import speech_to_text
 from core.tts import synthesis_worker, playback_worker
 from core.orchestrator import stream_and_speak, handle_immediate_actions
 from api.routes import app
+import queue
+
+LLM_QUEUE = queue.Queue()
+
+def llm_worker_thread():
+    """专用的 LLM 工作线程，维护单一持久事件循环，避免高并发下过多事件循环导致泄露"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    while True:
+        try:
+            text = LLM_QUEUE.get()
+            if text is None: break
+            loop.run_until_complete(stream_and_speak(text))
+        except Exception as e:
+            logger.error(f"LLM Worker Error: {e}")
+
 
 def cleanup_old_audio(days=3):
     """清理旧日志"""
@@ -159,9 +175,10 @@ def main():
     # 启动 API 服务
     threading.Thread(target=run_api_server, daemon=True).start()
 
-    # 启动全局 TTS 管线
+    # 启动全局 TTS 管线与 LLM 队列消费
     threading.Thread(target=persistent_worker, args=(synthesis_worker, GLOBAL_TEXT_QUEUE, GLOBAL_AUDIO_QUEUE), daemon=True).start()
     threading.Thread(target=persistent_worker, args=(playback_worker, GLOBAL_AUDIO_QUEUE), daemon=True).start()
+    threading.Thread(target=llm_worker_thread, daemon=True).start()
     
     logger.info("🎧 系统就绪，随时等待你开口说话...")
     while True:
@@ -180,9 +197,16 @@ def main():
                 TASK_CTRL.request_stop(reason="reset")
                 time.sleep(0.05) 
                 TASK_CTRL.reset()
-                # LLM 流式请求在独立线程中运行，各自创建独立事件循环是安全的
-                # 使用默认参数捕获 user_text 值，避免闭包引用问题
-                threading.Thread(target=lambda t=user_text: asyncio.run(stream_and_speak(t)), daemon=True).start()
+                
+                # 清空队列中积压的旧任务
+                while not LLM_QUEUE.empty():
+                    try:
+                        LLM_QUEUE.get_nowait()
+                    except queue.Empty:
+                        break
+                
+                # 将新任务推入队列，由固定 Worker 处理
+                LLM_QUEUE.put(user_text)
         except KeyboardInterrupt:
             logger.info("👋 用户中断，退出程序")
             break
