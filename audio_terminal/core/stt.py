@@ -55,9 +55,17 @@ async def funasr_stt(audio_file):
             await websocket.send(json.dumps({"is_speaking": False}))
 
             # Receive result
-            response = await websocket.recv()
-            result = json.loads(response)
-            raw_text = result.get('text', '')
+            raw_text = ""
+            try:
+                # FunASR offline mode only sends ONE message back.
+                # We use a timeout to prevent infinite hanging.
+                response = await asyncio.wait_for(websocket.recv(), timeout=15.0)
+                result = json.loads(response)
+                raw_text = result.get('text', '')
+            except asyncio.TimeoutError:
+                logger.error("FunASR STT WebSocket recv timeout!")
+            except Exception as e:
+                logger.error(f"FunASR STT WebSocket recv error: {e}")
 
             # Parse tags
             parsed = parse_funasr_tags(raw_text)
