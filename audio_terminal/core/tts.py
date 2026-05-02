@@ -129,8 +129,17 @@ def playback_worker(audio_queue):
                 chunk = audio_queue.get(timeout=0.1)
             except queue.Empty:
                 if aplay_proc and not TASK_CTRL.is_stopped():
-                    # 队列暂时空了，但可能还有下一句，不立即关闭 aplay 但更新状态
+                    # 队列暂时空了，说明当前句子已经喂完且没有新句子。
+                    # 安全起见关闭 aplay，避免因长时间 underrun 导致 ALSA 驱动卡死
                     set_is_playing(False)
+                    try:
+                        aplay_proc.stdin.close()
+                        aplay_proc.wait(timeout=1)
+                    except:
+                        try: aplay_proc.kill()
+                        except: pass
+                    aplay_proc = None
+                    TASK_CTRL.set_aplay(None)
                 continue
             
             # 只要拿到数据块，就标记为正在播放
