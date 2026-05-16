@@ -187,8 +187,16 @@ def main():
             if AUDIO_DUPLEX_MODE == "half" and get_is_playing():
                 time.sleep(0.1)
                 continue
+            t_start = time.time()
             audio_file, trigger_rms = record_audio_until_silence()
-            if audio_file is None: continue
+            if audio_file is None:
+                elapsed = time.time() - t_start
+                if elapsed < 0.3:
+                    logger.warning("⚠️ 录音组件异常快速返回，可能是音频输入设备不可用或配置错误。等待 1.0 秒后重试...")
+                    time.sleep(1.0)
+                else:
+                    time.sleep(0.2)
+                continue
             user_text = loop.run_until_complete(speech_to_text(audio_file, trigger_rms))
             if user_text and user_text.strip():
                 actions = GLOBAL_ACTION_MGR.process_chunk(user_text, use_semantic=True)

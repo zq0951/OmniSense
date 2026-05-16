@@ -151,6 +151,11 @@ current_threshold = 0   # 动态阈值，随提醒次数增加
 last_trigger_time = {} # Cooldown per zone
 last_temp = "未知"    # 最近获取的室内温度
 
+# HA 连接自适应检测状态变量
+ha_available = True
+ha_consecutive_failures = 0
+ha_offline_logged = False
+
 # --- Logic Functions ---
 
 def trigger_agent_proactive(zone_id, duration_sec):
@@ -200,6 +205,7 @@ def safe_float(val, default=0.0):
 
 def update_ha_states():
     global current_zone, zone_start_time, last_temp, current_threshold, current_data
+    global ha_available, ha_consecutive_failures, ha_offline_logged
     headers = {
         "Authorization": f"Bearer {HA_TOKEN}",
         "Content-Type": "application/json"
@@ -207,6 +213,12 @@ def update_ha_states():
     try:
         resp = requests.get(f"{HA_URL}/api/states", headers=headers, timeout=1)
         if resp.status_code == 200:
+            ha_consecutive_failures = 0
+            if not ha_available:
+                print("✅ [HA通讯成功] HomeAssistant 连接已恢复，雷达控制模块已重回高频监听状态。")
+                ha_available = True
+                ha_offline_logged = False
+                
             state_map = {s['entity_id']: s['state'] for s in resp.json()}
             data = []
             
@@ -268,8 +280,18 @@ def update_ha_states():
                         print(f"⚠️ [逻辑错误] 处理目标 {t} 时发生异常: {e}")
             current_data = {"targets": data, "count": reported_count}
             return current_data
+        else:
+            raise requests.exceptions.RequestException(f"HTTP code {resp.status_code}")
     except Exception as e:
-        print(f"🚨 [HA通讯错误] 无法获取状态: {e}")
+        ha_consecutive_failures += 1
+        if ha_consecutive_failures >= 3:
+            ha_available = False
+            if not ha_offline_logged:
+                print(f"🚨 [HA离线预警] 连续 {ha_consecutive_failures} 次连接 HomeAssistant 失败 (原因: {e})。")
+                print("⏳ 智能家居服务器已临时休眠，雷达感知轮询频率已降为 15 秒/次，停止日志刷屏。将在连接恢复后自动激活。")
+                ha_offline_logged = True
+        else:
+            print(f"⚠️ [HA连接重试] 尝试连接 HomeAssistant 失败 ({ha_consecutive_failures}/3): {e}")
     current_data = {"targets": [], "count": 0}
     return current_data
 
@@ -281,7 +303,12 @@ async def radar_background_task():
             await asyncio.to_thread(update_ha_states)
         except Exception as e:
             print(f"❌ 后台任务异常: {e}")
-        await asyncio.sleep(0.15)
+        
+        # 动态睡眠策略：如果 HA 离线，则睡眠 15 秒，避免高频碰壁和日志刷屏
+        if not ha_available:
+            await asyncio.sleep(15.0)
+        else:
+            await asyncio.sleep(0.15)
 
 # --- FastAPI Lifecycle & App Initialization ---
 

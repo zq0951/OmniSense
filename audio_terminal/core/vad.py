@@ -95,11 +95,18 @@ def record_audio_until_silence(output_filename="temp_audio.wav"):
     finally:
         _global_noise_floor = noise_floor
         _global_calibrated_threshold = calibrated_threshold
-        proc.terminate()
+        # 检测进程是否在 terminate 前已经自行退出
+        was_running = proc.poll() is None
+        if was_running:
+            proc.terminate()
         proc.wait()
+        exit_code = proc.returncode
 
     if not frames:
-        logger.info("(未检测到有效人声)")
+        if not was_running and exit_code != 0:
+            logger.error(f"❌ arecord 进程异常退出 (exit_code={exit_code})！这通常意味着音频输入设备不可用、被占用或 /etc/asound.conf 配置错误。")
+        else:
+            logger.info("(未检测到有效人声)")
         return None, 0
 
     with wave.open(output_filename, 'wb') as wf:
