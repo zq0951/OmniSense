@@ -1704,7 +1704,7 @@
           const sub = data[i] || { r: 100, t: 100 };
           const row = document.createElement("div");
           row.style.display = "grid";
-          row.style.gridTemplateColumns = "40px 1fr 1fr";
+          row.style.gridTemplateColumns = "40px 1fr 1fr 30px";
           row.style.gap = "15px";
           row.style.marginBottom = "12px";
           row.style.alignItems = "center";
@@ -1718,9 +1718,30 @@
                         <span style="font-size:9px; color:rgba(255,255,255,0.4)">CAPACITY</span>
                         <input type="number" class="sub-t" value="${sub.t}" step="0.1" style="margin-top:0">
                     </div>
+                    <button type="button" class="btn" style="padding: 4px; border-color: #ff3e3e; color: #ff3e3e; font-size: 14px; margin-top: 10px; height: 32px; display: flex; align-items: center; justify-content: center;" onclick="removeSubItem(${i})" title="Delete Sub-item">×</button>
                 `;
           list.appendChild(row);
         }
+      }
+
+      function removeSubItem(index) {
+        const rs = document.querySelectorAll(".sub-r");
+        const ts = document.querySelectorAll(".sub-t");
+        const currentData = [];
+        rs.forEach((r, i) => {
+          if (i !== index) {
+            currentData.push({
+              r: parseFloat(r.value || 0),
+              t: parseFloat(ts[i].value || 0),
+            });
+          }
+        });
+        
+        const remainingInput = document.getElementById("inv-remaining");
+        const newCount = currentData.length;
+        remainingInput.value = newCount;
+        
+        renderSubItemsUI(newCount, currentData);
       }
 
       // Add listener to update sub-items when count changes
